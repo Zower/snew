@@ -59,7 +59,9 @@ impl Reddit {
     ///     )
     ///     .unwrap();
     /// let rust = reddit.subreddit("rust");
-    /// // This will iterate over all posts, non stop. Not recommended, as there is currently no monitoring on the requests to follow the API rules.
+    /// // This will iterate over all posts, non stop.
+    /// // This is not recommended, as there is currently
+    /// // no monitoring on the requests to follow the Reddit API rules.
     /// for post in rust.top() {
     ///     println!("{}", post.title);
     /// }
