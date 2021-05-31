@@ -6,7 +6,7 @@ use crate::things::raw::subreddit::RawListing;
 use self::raw::post::RawPost;
 
 /// A handle to interact with a subreddit.
-/// See the
+/// See [`Posts`] for some gotchas when iterating over Posts.
 #[derive(Debug)]
 pub struct Subreddit<'a> {
     pub url: String,
