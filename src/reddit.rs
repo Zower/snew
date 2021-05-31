@@ -1,16 +1,18 @@
 use crate::auth::{Authenticator, Credentials, ScriptAuth, Token};
-use crate::things;
+use crate::things::*;
 
 use reqwest::{
     blocking::{Client, Response},
     header,
 };
 
+type Result<T> = std::result::Result<T, Error>;
 /// Communicate with the Reddit API.
 /// # Creating a script application
-/// Go to https://www.reddit.com/prefs/apps and create a new application.
-/// Give it the name 'snew' and whatever description and about url (can be empty) you like, and use http://www.example.com/unused/redirect/uri as the redirect uri.
-/// The client_id will be in the top left corner under the name. The secret is marked clearly. Username and password are your regular login credentials.
+/// Go to [the reddit OAuth guide](https://github.com/reddit-archive/reddit/wiki/OAuth2-Quick-Start-Example#first-steps). Follow the instructions under "First Steps".
+///
+/// After following the instructions, you should be on [the reddit prefs page](https://www.reddit.com/prefs/apps). The client_id will be in the top left corner under the name you chose. The secret is marked clearly. Username and password are your regular login credentials.
+/// # Usage
 /// ```no_run
 /// use snew::{reddit::Reddit, auth::Credentials};
 /// let reddit = Reddit::script(
@@ -25,6 +27,7 @@ use reqwest::{
 ///     .unwrap();
 /// println!("{:?}", reddit.me());
 /// ```
+/// See also [`Reddit::subreddit`].
 #[derive(Debug)]
 pub struct Reddit {
     client: Client,
@@ -35,18 +38,41 @@ pub struct Reddit {
 // The API calls.
 impl Reddit {
     /// Get information about the user, useful for debugging.
-    pub fn me(&self) -> Result<things::Me, Error> {
-        println!("{:?}", self.token);
-
+    pub fn me(&self) -> Result<Me> {
         let response = self.get("api/v1/me")?;
 
-        Ok(response
-            .json::<things::Me>()
-            .map_err(|err| Error::APIParseError(err))?)
+        Ok(response.json().map_err(|err| Error::APIParseError(err))?)
     }
 
-    // Make a get request to self.url with the given path.
-    fn get(&self, path: &str) -> Result<Response, Error> {
+    /// Create a handle into a specific subreddit. 
+    /// # Usage
+    /// ```no_run
+    /// use snew::{reddit::Reddit, auth::Credentials};
+    /// let reddit = Reddit::script(
+    ///     Credentials {
+    ///         client_id: String::from("client_id"),
+    ///         client_secret: String::from("client_secret"),
+    ///         username: String::from("reddit username"),
+    ///         password: String::from("reddit password")
+    ///     },
+    ///     "<Operating system>:snew:v0.1.0 (by u/<reddit username>)"
+    ///     )
+    ///     .unwrap();
+    /// let rust = reddit.subreddit("rust");
+    /// // This will iterate over all posts, non stop. Not recommended, as there is currently no monitoring on the requests to follow the API rules.
+    /// for post in rust.top() {
+    ///     println!("{}", post.title);
+    /// }
+    /// // So you probably want to take() some elements.
+    /// for post in rust.hot().take(20) {
+    ///     println!("{}", post.title);
+    /// }
+    pub fn subreddit(&self, name: &str) -> Subreddit {
+        Subreddit::create(format!("{}r/{}", self.url, name).as_str(), &self.client)
+    }
+
+    // Make a get request to self.url with the given path, without any queries.
+    fn get(&self, path: &str) -> Result<Response> {
         Ok(self
             .client
             .get(format!("{}{}", self.url, path))
@@ -58,7 +84,7 @@ impl Reddit {
 // General implementations
 impl Reddit {
     /// Creates a new API connection, using the given authenticator.
-    pub fn new<T>(authenticator: T, user_agent: &str) -> Result<Self, Error>
+    pub fn new<T>(authenticator: T, user_agent: &str) -> Result<Self>
     where
         T: Authenticator,
     {
@@ -76,7 +102,7 @@ impl Reddit {
     }
 
     /// Convenience method for creating a new script API connection.
-    pub fn script(creds: Credentials, user_agent: &str) -> Result<Self, Error> {
+    pub fn script(creds: Credentials, user_agent: &str) -> Result<Self> {
         let script_auth = ScriptAuth::new(creds);
 
         Reddit::new(script_auth, user_agent)
@@ -111,6 +137,8 @@ pub enum Error {
     RequestError(reqwest::Error),
     /// A JSON parsing error. Usually this means the response was missing some necessary fields, e.g. because you are not authenticated correctly.
     APIParseError(reqwest::Error),
+    ///
+    KindParseError,
 }
 
 impl std::error::Error for Error {
@@ -118,6 +146,7 @@ impl std::error::Error for Error {
         match self {
             Self::RequestError(err) => Some(err),
             Self::APIParseError(err) => Some(err),
+            Self::KindParseError => None
         }
     }
 }
@@ -125,14 +154,15 @@ impl std::error::Error for Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::RequestError(err) => {
-                write!(f, "Failed to make a HTTPS request. \nCaused by: {}", err)
-            }
-            Self::APIParseError(err) => write!(
+            Self::RequestError(err) => 
+                write!(f, "Failed to make a HTTPS request. \nCaused by: {}", err),
+            
+            Self::APIParseError(err) => 
+                write!(
                 f,
                 "Malformed response from the Reddit API. Are you authenticated correctly? \nCaused by: {}",
-                err
-            ),
+                err),
+            Self::KindParseError => write!(f, "Failed to parse from kind into Kind enum. See https://www.reddit.com/dev/api/#fullnames for the types."),
         }
     }
 }

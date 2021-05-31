@@ -69,8 +69,6 @@ impl Authenticator for ScriptAuth {
             .send()
             .map_err(|err| Error::RequestError(err))?;
 
-        println!("{:?}", response);
-
         // Parse the response as JSON.
         Ok(response
             .json::<Token>()
