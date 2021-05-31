@@ -44,7 +44,7 @@ impl Reddit {
         Ok(response.json().map_err(|err| Error::APIParseError(err))?)
     }
 
-    /// Create a handle into a specific subreddit. 
+    /// Create a handle into a specific subreddit.
     /// # Usage
     /// ```no_run
     /// use snew::{reddit::Reddit, auth::Credentials};
@@ -146,7 +146,7 @@ impl std::error::Error for Error {
         match self {
             Self::RequestError(err) => Some(err),
             Self::APIParseError(err) => Some(err),
-            Self::KindParseError => None
+            Self::KindParseError => None,
         }
     }
 }
@@ -154,10 +154,9 @@ impl std::error::Error for Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::RequestError(err) => 
+            Self::RequestError(err) =>
                 write!(f, "Failed to make a HTTPS request. \nCaused by: {}", err),
-            
-            Self::APIParseError(err) => 
+            Self::APIParseError(err) =>
                 write!(
                 f,
                 "Malformed response from the Reddit API. Are you authenticated correctly? \nCaused by: {}",
