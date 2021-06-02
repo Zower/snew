@@ -1,3 +1,4 @@
+//! Authentication towards the API.
 use crate::reddit::Error;
 
 use reqwest::blocking::Client;

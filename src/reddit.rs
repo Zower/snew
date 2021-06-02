@@ -1,3 +1,4 @@
+//! Reddit API.
 use crate::auth::{Authenticator, Credentials, ScriptAuth, Token};
 use crate::things::*;
 
@@ -6,7 +7,7 @@ use reqwest::{
     header,
 };
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 /// Communicate with the Reddit API.
 /// # Creating a script application
 /// Go to [the reddit OAuth guide](https://github.com/reddit-archive/reddit/wiki/OAuth2-Quick-Start-Example#first-steps). Follow the instructions under "First Steps".
@@ -47,6 +48,7 @@ impl Reddit {
     /// Create a handle into a specific subreddit.
     /// # Usage
     /// ```no_run
+    /// # fn main() -> snew::reddit::Result<()> {
     /// use snew::{reddit::Reddit, auth::Credentials};
     /// let reddit = Reddit::script(
     ///     Credentials {
@@ -58,17 +60,26 @@ impl Reddit {
     ///     "<Operating system>:snew:v0.1.0 (by u/<reddit username>)"
     ///     )
     ///     .unwrap();
+    ///
     /// let rust = reddit.subreddit("rust");
-    /// // This will iterate over all posts, non stop.
-    /// // This is not recommended, as there is currently
-    /// // no monitoring on the requests to follow the Reddit API rules.
-    /// for post in rust.top() {
-    ///     println!("{}", post.title);
-    /// }
-    /// // So you probably want to take() some elements.
+    ///
+    /// // You probably want to take() some elements, otherwise the Iterator will go as long as there are posts.
     /// for post in rust.hot().take(20) {
+    ///     let post = post?;
     ///     println!("{}", post.title);
     /// }
+    /// // You can also set the request limit.
+    /// // It changes how many posts are fetched from the Reddit API at once.
+    /// let mut top = rust.top();
+    /// top.limit = 25;
+    ///
+    /// for post in top.take(20) {
+    ///     let post = post?;
+    ///     println!("{}", post.selftext);
+    /// }
+    /// # Ok(())
+    /// # }
+
     pub fn subreddit(&self, name: &str) -> Subreddit {
         Subreddit::create(format!("{}r/{}", self.url, name).as_str(), &self.client)
     }

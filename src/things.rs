@@ -1,9 +1,9 @@
+//! Reddit 'things'. In the API, a thing is a type + fullname.
 use reqwest::blocking::Client;
 use serde::Deserialize;
 
-use crate::things::raw::subreddit::RawListing;
-
-use self::raw::post::RawPost;
+use self::raw::{post::RawPost, subreddit::RawListing};
+use crate::reddit::{Error, Result};
 
 /// A handle to interact with a subreddit.
 /// See [`Posts`] for some gotchas when iterating over Posts.
@@ -36,9 +36,10 @@ impl<'a> Subreddit<'a> {
         self.posts_sorted("top")
     }
 
-    fn posts_sorted(&self, url: &str) -> Posts {
+    fn posts_sorted(&self, path: &str) -> Posts {
         Posts {
-            url: format!("{}/{}", self.url, url),
+            limit: 100,
+            url: format!("{}/{}", self.url, path),
             cached_posts: Vec::new(),
             client: self.client,
             after: String::from(""),
@@ -46,14 +47,17 @@ impl<'a> Subreddit<'a> {
     }
 }
 
-/// A set of posts, meant to be iterated over. This iterator never returns None. It always returns the next post unless the GET request fails.
-/// # Panics
-/// Currently, if you iterate over this, it may panic on you, for no good reason.
-/// It is intended to implement Iterator better, but for now, make sure to use take() so you dont make too many requests. If it still panics, it's likely something is wrong with the GET request.
-/// Try something simpler instead (like reddit.me()), to make sure your requests are working.
+/// Represents interacting with a set of posts, meant to be iterated over. As long as there are posts to iterate over, this iterator will continue. You may wish to take() some elements.
+/// The iterator returns a Result<Post, Error>. The errors are either from the HTTP request or the JSON parsing.
 #[derive(Debug)]
 pub struct Posts<'a> {
-    pub url: String,
+    /// The amount of posts to request from the Reddit API. This does not mean you can only iterate over this many posts.
+    /// The Iterator will simply make more requests if you iterate over more than this limit.
+    /// You should set this to a specific number if you know that you will be making some exact number of requests < 100, so
+    /// the iterator doesnt fetch more posts than it needs to. If you dont know how many you are iterating over, just leave it at the default
+    /// which is 100, the max Reddit allows.
+    pub limit: i32,
+    url: String,
     cached_posts: Vec<Post>,
     client: &'a Client,
     after: String,
@@ -63,46 +67,62 @@ pub struct Posts<'a> {
 #[derive(Debug, Clone)]
 pub struct Post {
     pub title: String,
+    /// Upvotes
+    pub ups: i32,
+    /// Downvotes
+    pub downs: i32,
+    pub url: String,
     pub author: String,
+    /// The text of this post.
     pub selftext: String,
+    /// The unique base 36 ID of this post
+    pub id: String,
+    /// The 'kind'. This should always be t3. Combine with [`Self::id`] to get the fullname of this post.
     pub kind: String,
 }
 
 impl<'a> Iterator for Posts<'a> {
-    type Item = Post;
+    type Item = Result<Post>;
 
     // Unsure how to handle potential failures better.
     // Could try using a Iterator that can fail, but seems like extra hastle for the user to match every next().
     fn next(&mut self) -> Option<Self::Item> {
-        if self.cached_posts.is_empty() {
-            let listing = self
+        if let Some(post) = self.cached_posts.pop() {
+            Some(Ok(post))
+        } else {
+            let res = self
                 .client
                 .get(self.url.as_str())
                 // TODO: Limit should be configurable
-                .query(&[("limit", "100")])
+                .query(&[("limit", self.limit)])
                 .query(&[("after", self.after.as_str())])
-                .send()
-                // This
-                .unwrap()
-                .json::<RawListing>()
-                // And this need to be looked at.
-                .unwrap();
+                .send();
+
+            // Probably some cleaner way to do this
+            let listing = match res {
+                Ok(response) => match response.json::<RawListing>() {
+                    Ok(raw) => raw,
+                    Err(err) => return Some(Err(Error::APIParseError(err))),
+                },
+                Err(err) => return Some(Err(Error::RequestError(err))),
+            };
 
             self.after = listing.data.pagination.after;
 
-            // Cache each RawPost from the listing, and convert them to a usable Post at the same time.
-            for post in listing.data.children {
-                self.cached_posts.push(post.into());
+            self.cached_posts
+                .extend(listing.data.children.into_iter().rev().map(From::from));
+
+            let post = self.cached_posts.pop();
+            if let Some(post) = post {
+                Some(Ok(post))
+            } else {
+                None
             }
-
-            // Reverse it now, so we avoid self.cached_posts.remove(0) every time next() is called.
-            self.cached_posts.reverse();
         }
-
-        Some(self.cached_posts.pop().unwrap())
     }
 }
 
+/// The authenticated user
 #[derive(Debug, Deserialize)]
 pub struct Me {
     pub name: String,
@@ -116,8 +136,12 @@ impl From<RawPost> for Post {
     fn from(raw: RawPost) -> Self {
         Self {
             title: raw.data.title,
+            ups: raw.data.ups,
+            downs: raw.data.downs,
+            url: raw.data.url,
             author: raw.data.author,
             selftext: raw.data.selftext,
+            id: raw.data.id,
             kind: raw.kind,
         }
     }
@@ -183,6 +207,9 @@ pub mod raw {
         #[derive(Debug, Clone, Deserialize)]
         pub struct RawPostData {
             pub title: String,
+            pub ups: i32,
+            pub downs: i32,
+            pub url: String,
             pub author: String,
             pub selftext: String,
             pub id: String,
