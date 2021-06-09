@@ -2,7 +2,7 @@
 use reqwest::blocking::Client;
 use serde::Deserialize;
 
-use self::raw::{listing::RawListing, generic_kind::RawKind, post::RawPostData};
+use self::raw::{generic_kind::RawKind, listing::RawListing, post::RawPostData};
 use crate::reddit::{Error, Result};
 
 /// A handle to interact with a subreddit.
@@ -43,7 +43,6 @@ impl<'a> Subreddit<'a> {
             client: self.client,
             cached_comments: Vec::new(),
         }
-
     }
 
     fn posts_sorted(&self, path: &str) -> Posts {
@@ -77,7 +76,6 @@ pub struct Post {
     pub kind: String,
 }
 
-
 /// Represents interacting with a set of posts, meant to be iterated over. As long as there are posts to iterate over, this iterator will continue. You may wish to take() some elements.
 /// The iterator returns a Result<Post, Error>. The errors are either from the HTTP request or the JSON parsing.
 #[derive(Debug)]
@@ -96,7 +94,6 @@ pub struct Posts<'a> {
 
 impl<'a> Iterator for Posts<'a> {
     type Item = Result<Post>;
-
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(post) = self.cached_posts.pop() {
@@ -158,7 +155,6 @@ pub struct Me {
     pub verified: bool,
 }
 
-
 // Create a post from som raw data.
 impl From<RawKind<RawPostData>> for Post {
     fn from(raw: RawKind<RawPostData>) -> Self {
@@ -213,12 +209,12 @@ pub mod raw {
 
         // Listings from Reddit take this form.
         #[derive(Debug, Clone, Deserialize)]
-        pub struct RawListing <T> {
+        pub struct RawListing<T> {
             pub data: RawListingData<T>,
         }
 
         #[derive(Debug, Clone, Deserialize)]
-        pub struct RawListingData <T> {
+        pub struct RawListingData<T> {
             #[serde(flatten)]
             pub pagination: Pagination,
             pub children: Vec<T>,
@@ -227,9 +223,9 @@ pub mod raw {
 
     pub mod generic_kind {
         use serde::Deserialize;
-        
+
         #[derive(Debug, Deserialize)]
-        pub struct RawKind <T> {
+        pub struct RawKind<T> {
             pub data: T,
             pub kind: String,
         }
@@ -254,8 +250,6 @@ pub mod raw {
         use serde::Deserialize;
 
         #[derive(Debug, Deserialize)]
-        pub struct RawComment {
-
-        }
+        pub struct RawComment {}
     }
 }
