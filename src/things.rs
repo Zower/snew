@@ -2,7 +2,7 @@
 use reqwest::blocking::Client;
 use serde::Deserialize;
 
-use self::raw::{post::RawPost, subreddit::RawListing};
+use self::raw::{listing::RawListing, generic_kind::RawKind, post::RawPostData};
 use crate::reddit::{Error, Result};
 
 /// A handle to interact with a subreddit.
@@ -36,6 +36,16 @@ impl<'a> Subreddit<'a> {
         self.posts_sorted("top")
     }
 
+    /// Get an iterator over the comment trees of the supplied post.
+    pub fn comments(&self, post: &Post) -> Comments {
+        Comments {
+            url: format!("{}/comments/{}", self.url, post.id.as_str()),
+            client: self.client,
+            cached_comments: Vec::new(),
+        }
+
+    }
+
     fn posts_sorted(&self, path: &str) -> Posts {
         Posts {
             limit: 100,
@@ -51,11 +61,13 @@ impl<'a> Subreddit<'a> {
 #[derive(Debug, Clone)]
 pub struct Post {
     pub title: String,
-    /// Upvotes
+    /// Upvotes.
     pub ups: i32,
-    /// Downvotes
+    /// Downvotes.
     pub downs: i32,
+    /// The associated URL of this post. It is an external website if the post is a link, otherwise the comment section.
     pub url: String,
+    /// The author.
     pub author: String,
     /// The text of this post.
     pub selftext: String,
@@ -65,24 +77,6 @@ pub struct Post {
     pub kind: String,
 }
 
-// impl Post {
-//     pub fn comments(&self) -> Comments {
-//         Comments {
-//             url: String::from(self.url.as_str().)
-//         }
-//     }
-// }
-
-pub struct Comment {
-    pub author: String,
-}
-
-pub struct Comments<'a> {
-    url: String,
-    client: &'a Client,
-    cached_comments: Vec<Comment>,
-    after: String,
-}
 
 /// Represents interacting with a set of posts, meant to be iterated over. As long as there are posts to iterate over, this iterator will continue. You may wish to take() some elements.
 /// The iterator returns a Result<Post, Error>. The errors are either from the HTTP request or the JSON parsing.
@@ -103,8 +97,7 @@ pub struct Posts<'a> {
 impl<'a> Iterator for Posts<'a> {
     type Item = Result<Post>;
 
-    // Unsure how to handle potential failures better.
-    // Could try using a Iterator that can fail, but seems like extra hastle for the user to match every next().
+
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(post) = self.cached_posts.pop() {
             Some(Ok(post))
@@ -112,22 +105,23 @@ impl<'a> Iterator for Posts<'a> {
             let res = self
                 .client
                 .get(self.url.as_str())
-                // TODO: Limit should be configurable
                 .query(&[("limit", self.limit)])
                 .query(&[("after", self.after.as_str())])
                 .send();
 
             // Probably some cleaner way to do this
             let listing = match res {
-                Ok(response) => match response.json::<RawListing>() {
+                Ok(response) => match response.json::<RawListing<RawKind<RawPostData>>>() {
                     Ok(raw) => raw,
                     Err(err) => return Some(Err(Error::APIParseError(err))),
                 },
                 Err(err) => return Some(Err(Error::RequestError(err))),
             };
 
+            // Make sure the next HTTP request gets posts after the last one we fetched.
             self.after = listing.data.pagination.after;
 
+            // Add posts to the cached_posts array, converting from RawPost to Post in the process
             self.cached_posts
                 .extend(listing.data.children.into_iter().rev().map(From::from));
 
@@ -141,7 +135,20 @@ impl<'a> Iterator for Posts<'a> {
     }
 }
 
-/// The authenticated user
+/// A comment.
+#[derive(Debug)]
+pub struct Comment {
+    pub author: String,
+}
+
+#[derive(Debug)]
+pub struct Comments<'a> {
+    url: String,
+    client: &'a Client,
+    cached_comments: Vec<Comment>,
+}
+
+/// Information about the authenticated user
 #[derive(Debug, Deserialize)]
 pub struct Me {
     pub name: String,
@@ -151,8 +158,10 @@ pub struct Me {
     pub verified: bool,
 }
 
-impl From<RawPost> for Post {
-    fn from(raw: RawPost) -> Self {
+
+// Create a post from som raw data.
+impl From<RawKind<RawPostData>> for Post {
+    fn from(raw: RawKind<RawPostData>) -> Self {
         Self {
             title: raw.data.title,
             ups: raw.data.ups,
@@ -198,30 +207,36 @@ pub mod raw {
         // pub before: String,
     }
 
-    pub mod subreddit {
+    pub mod listing {
         use super::Pagination;
         use serde::Deserialize;
+
+        // Listings from Reddit take this form.
         #[derive(Debug, Clone, Deserialize)]
-        pub struct RawListing {
-            pub data: RawListingData,
+        pub struct RawListing <T> {
+            pub data: RawListingData<T>,
         }
 
         #[derive(Debug, Clone, Deserialize)]
-        pub struct RawListingData {
+        pub struct RawListingData <T> {
             #[serde(flatten)]
             pub pagination: Pagination,
-            pub children: Vec<super::post::RawPost>,
+            pub children: Vec<T>,
+        }
+    }
+
+    pub mod generic_kind {
+        use serde::Deserialize;
+        
+        #[derive(Debug, Deserialize)]
+        pub struct RawKind <T> {
+            pub data: T,
+            pub kind: String,
         }
     }
 
     pub mod post {
         use serde::Deserialize;
-
-        #[derive(Debug, Clone, Deserialize)]
-        pub struct RawPost {
-            pub data: RawPostData,
-            pub kind: String,
-        }
 
         #[derive(Debug, Clone, Deserialize)]
         pub struct RawPostData {
@@ -232,6 +247,15 @@ pub mod raw {
             pub author: String,
             pub selftext: String,
             pub id: String,
+        }
+    }
+
+    pub mod comment {
+        use serde::Deserialize;
+
+        #[derive(Debug, Deserialize)]
+        pub struct RawComment {
+
         }
     }
 }
