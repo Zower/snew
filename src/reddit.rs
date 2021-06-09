@@ -6,6 +6,7 @@ use reqwest::{
     blocking::{Client, Response},
     header,
 };
+use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 /// Communicate with the Reddit API.
@@ -42,7 +43,7 @@ impl Reddit {
     pub fn me(&self) -> Result<Me> {
         let response = self.get("api/v1/me")?;
 
-        Ok(response.json().map_err(|err| Error::APIParseError(err))?)
+        Ok(response.json()?)
     }
 
     /// Create a handle into a specific subreddit.
@@ -103,7 +104,7 @@ impl Reddit {
     {
         match authenticator.get_token() {
             Ok(token) => {
-                let client = Reddit::make_client(user_agent, token.access_token.as_str());
+                let client = Reddit::make_client(user_agent, token.access_token.as_str())?;
                 Ok(Self {
                     client,
                     token,
@@ -121,60 +122,63 @@ impl Reddit {
         Reddit::new(script_auth, user_agent)
     }
 
-    fn make_client(user_agent: &str, access_token: &str) -> Client {
+    fn make_client(user_agent: &str, access_token: &str) -> Result<Client> {
         let mut headers = header::HeaderMap::new();
+
         headers.insert(
             header::AUTHORIZATION,
-            // Unwrap is OK here, as the token always comes from Reddit, and as such, should never contain illegal characters.
-            header::HeaderValue::from_str(format!("bearer {}", access_token).as_str()).unwrap(),
+            header::HeaderValue::from_str(format!("bearer {}", access_token).as_str())?,
         );
         headers.insert(
             header::USER_AGENT,
-            header::HeaderValue::from_str(user_agent)
-                .expect("User agent can only contain visible ASCII characters (32-127)"),
+            header::HeaderValue::from_str(user_agent)?,
         );
 
-        Client::builder()
+        Ok(Client::builder()
             .user_agent(user_agent)
             .default_headers(headers)
-            .build()
-            // Expect here, as I assume reqwest almost never fails to build the TLS backend etc.
-            .expect("The reqwest backend failed to build. See the reqwest documentation (https://docs.rs/reqwest/0.11.3/reqwest/blocking/struct.Client.html#method.new).")
+            .build()?)
     }
 }
 
 /// All errors that can occur when using Snew. The source error (e.g. from a separate library), if any, can be found by calling error.source().
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    /// A HTTPS request error.
-    RequestError(reqwest::Error),
+    /// A reqwest error. Will make more specific
+    #[error("Reqwest returned an error.\nCaused by:\t{0}")]
+    RequestError(#[from] reqwest::Error),
     /// A JSON parsing error. Usually this means the response was missing some necessary fields, e.g. because you are not authenticated correctly.
-    APIParseError(reqwest::Error),
-    ///
-    KindParseError,
+    #[error(
+        "Malformed JSON response from the Reddit API. Are you authenticated correctly?\nCaused by:\t{0}"
+    )]
+    APIParseError(#[from] serde_json::Error),
+    #[error("Invalid header value. Either your user agent is malformed (only ASCII 32-127 allowed), or Reddit is returning disallowed characters in the access token. \nCaused by:\t{0}")]
+    InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
+    // ///
+    // KindParseError
 }
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::RequestError(err) => Some(err),
-            Self::APIParseError(err) => Some(err),
-            Self::KindParseError => None,
-        }
-    }
-}
+// impl std::error::Error for Error {
+//     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+//         match self {
+//             Self::RequestError(err) => Some(err),
+//             Self::APIParseError(err) => Some(err),
+//             Self::KindParseError => None,
+//         }
+//     }
+// }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::RequestError(err) =>
-                write!(f, "Failed to make a HTTPS request. \nCaused by: {}", err),
-            Self::APIParseError(err) =>
-                write!(
-                f,
-                "Malformed response from the Reddit API. Are you authenticated correctly? \nCaused by: {}",
-                err),
-            Self::KindParseError => write!(f, "Failed to parse from kind into Kind enum. See https://www.reddit.com/dev/api/#fullnames for the types."),
-        }
-    }
-}
+// impl std::fmt::Display for Error {
+//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//         match self {
+//             Self::RequestError(err) =>
+//                 write!(f, "Failed to make a HTTPS request. \nCaused by: {}", err),
+//             Self::APIParseError(err) =>
+//                 write!(
+//                 f,
+//                 "Malformed response from the Reddit API. Are you authenticated correctly? \nCaused by: {}",
+//                 err),
+//             Self::KindParseError => write!(f, "Failed to parse from kind into Kind enum. See https://www.reddit.com/dev/api/#fullnames for the types."),
+//         }
+//     }
+// }

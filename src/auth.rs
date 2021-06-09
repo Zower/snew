@@ -51,9 +51,7 @@ impl Authenticator for ScriptAuth {
     fn get_token(&self) -> Result<Token, Error> {
         let client = Client::builder()
             .user_agent(ScriptAuth::default_agent())
-            .build()
-            // Expect here, as I assume reqwest almost never fails to build the TLS backend etc.
-            .expect("The reqwest backend failed to build. See the reqwest documentation (https://docs.rs/reqwest/0.11.3/reqwest/blocking/struct.Client.html#method.new).");
+            .build()?;
 
         // Make the request for the access token.
         let response = client
@@ -71,8 +69,6 @@ impl Authenticator for ScriptAuth {
             .map_err(|err| Error::RequestError(err))?;
 
         // Parse the response as JSON.
-        Ok(response
-            .json::<Token>()
-            .map_err(|err| Error::APIParseError(err))?)
+        Ok(serde_json::from_str(response.text()?.as_str())?)
     }
 }

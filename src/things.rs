@@ -105,12 +105,16 @@ impl<'a> Iterator for Posts<'a> {
                 .query(&[("limit", self.limit)])
                 .query(&[("after", self.after.as_str())])
                 .send();
-
             // Probably some cleaner way to do this
             let listing = match res {
-                Ok(response) => match response.json::<RawListing<RawKind<RawPostData>>>() {
-                    Ok(raw) => raw,
-                    Err(err) => return Some(Err(Error::APIParseError(err))),
+                Ok(response) => match response.text() {
+                    Ok(text) => match serde_json::from_str::<RawListing<RawKind<RawPostData>>>(
+                        text.as_str(),
+                    ) {
+                        Ok(raw) => raw,
+                        Err(err) => return Some(Err(Error::APIParseError(err))),
+                    },
+                    Err(err) => return Some(Err(Error::RequestError(err))),
                 },
                 Err(err) => return Some(Err(Error::RequestError(err))),
             };
