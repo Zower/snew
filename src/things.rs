@@ -47,22 +47,6 @@ impl<'a> Subreddit<'a> {
     }
 }
 
-/// Represents interacting with a set of posts, meant to be iterated over. As long as there are posts to iterate over, this iterator will continue. You may wish to take() some elements.
-/// The iterator returns a Result<Post, Error>. The errors are either from the HTTP request or the JSON parsing.
-#[derive(Debug)]
-pub struct Posts<'a> {
-    /// The amount of posts to request from the Reddit API. This does not mean you can only iterate over this many posts.
-    /// The Iterator will simply make more requests if you iterate over more than this limit.
-    /// You should set this to a specific number if you know that you will be making some exact number of requests < 100, so
-    /// the iterator doesnt fetch more posts than it needs to. If you dont know how many you are iterating over, just leave it at the default
-    /// which is 100, the max Reddit allows.
-    pub limit: i32,
-    url: String,
-    cached_posts: Vec<Post>,
-    client: &'a Client,
-    after: String,
-}
-
 /// A post.
 #[derive(Debug, Clone)]
 pub struct Post {
@@ -79,6 +63,41 @@ pub struct Post {
     pub id: String,
     /// The 'kind'. This should always be t3. Combine with [`Self::id`] to get the fullname of this post.
     pub kind: String,
+}
+
+// impl Post {
+//     pub fn comments(&self) -> Comments {
+//         Comments {
+//             url: String::from(self.url.as_str().)
+//         }
+//     }
+// }
+
+pub struct Comment {
+    pub author: String,
+}
+
+pub struct Comments<'a> {
+    url: String,
+    client: &'a Client,
+    cached_comments: Vec<Comment>,
+    after: String,
+}
+
+/// Represents interacting with a set of posts, meant to be iterated over. As long as there are posts to iterate over, this iterator will continue. You may wish to take() some elements.
+/// The iterator returns a Result<Post, Error>. The errors are either from the HTTP request or the JSON parsing.
+#[derive(Debug)]
+pub struct Posts<'a> {
+    /// The amount of posts to request from the Reddit API. This does not mean you can only iterate over this many posts.
+    /// The Iterator will simply make more requests if you iterate over more than this limit.
+    /// You should set this to a specific number if you know that you will be making some exact number of requests < 100, so
+    /// the iterator doesnt fetch more posts than it needs to. If you dont know how many you are iterating over, just leave it at the default
+    /// which is 100, the max Reddit allows.
+    pub limit: i32,
+    url: String,
+    cached_posts: Vec<Post>,
+    client: &'a Client,
+    after: String,
 }
 
 impl<'a> Iterator for Posts<'a> {
