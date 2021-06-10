@@ -113,31 +113,5 @@ pub enum Error {
     APIParseError(#[from] serde_json::Error),
     #[error("Invalid header value. Either your user agent is malformed (only ASCII 32-127 allowed), or Reddit is returning disallowed characters in the access token. \nCaused by:\t{0}")]
     InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
-    // ///
     // KindParseError
 }
-
-// impl std::error::Error for Error {
-//     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-//         match self {
-//             Self::RequestError(err) => Some(err),
-//             Self::APIParseError(err) => Some(err),
-//             Self::KindParseError => None,
-//         }
-//     }
-// }
-
-// impl std::fmt::Display for Error {
-//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-//         match self {
-//             Self::RequestError(err) =>
-//                 write!(f, "Failed to make a HTTPS request. \nCaused by: {}", err),
-//             Self::APIParseError(err) =>
-//                 write!(
-//                 f,
-//                 "Malformed response from the Reddit API. Are you authenticated correctly? \nCaused by: {}",
-//                 err),
-//             Self::KindParseError => write!(f, "Failed to parse from kind into Kind enum. See https://www.reddit.com/dev/api/#fullnames for the types."),
-//         }
-//     }
-// }

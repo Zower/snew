@@ -23,11 +23,11 @@
 // #![deny(clippy::all)]
 #![deny(
     missing_debug_implementations,
-//     unconditional_recursion,
-//     future_incompatible,
+    unconditional_recursion,
+    future_incompatible,
 //     missing_docs
 )]
-// #![deny(unsafe_code)]
+#![deny(unsafe_code)]
 pub mod auth;
 pub mod reddit;
 pub mod things;
