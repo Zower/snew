@@ -14,13 +14,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// ```no_run
 /// use snew::{reddit::Reddit, auth::{ScriptAuthenticator, Credentials}};
 ///
-/// let script_auth = ScriptAuthenticator::new(
-///     Credentials {
-///         client_id: String::from("client_id"),
-///         client_secret: String::from("client_secret"),
-///         username: String::from("reddit username"),
-///         password: String::from("reddit password")
-///     });
+/// let script_auth = ScriptAuthenticator::new(Credentials::new(
+///     "client_id",
+///     "client_secret",
+///     "username",
+///     "password",
+/// ));
 ///
 /// let reddit = Reddit::new(
 ///     script_auth,
@@ -50,10 +49,16 @@ impl<T: Authenticator> Reddit<T> {
 
     /// Get information about the user, useful for debugging.
     pub fn me(&self) -> Result<Me> {
-        let response = self
-            .client
-            .get(format!("{}{}", self.url, "api/v1/me").as_str(), None::<&()>)?;
-        Ok(response.json()?)
+        if self.client.authenticator.borrow().is_user() {
+            Ok(serde_json::from_str(
+                self.client
+                    .get(format!("{}{}", self.url, "api/v1/me").as_str(), None::<&()>)?
+                    .text()?
+                    .as_str(),
+            )?)
+        } else {
+            Err(Error::NotLoggedInError)
+        }
     }
 
     /// Create a handle into a specific subreddit.
@@ -61,13 +66,12 @@ impl<T: Authenticator> Reddit<T> {
     /// ```no_run
     /// # fn main() -> snew::reddit::Result<()> {
     /// # use snew::{reddit::Reddit, auth::{ScriptAuthenticator, Credentials}};
-    /// # let script_auth = ScriptAuthenticator::new(
-    /// #   Credentials {
-    /// #        client_id: String::from("client_id"),
-    /// #        client_secret: String::from("client_secret"),
-    /// #        username: String::from("reddit username"),
-    /// #        password: String::from("reddit password")
-    /// #    });
+    /// # let script_auth = ScriptAuthenticator::new(Credentials::new(
+    /// #    "client_id",
+    /// #   "client_secret",
+    /// #   "username",
+    /// #   "password",
+    /// # ));
     /// # let reddit = Reddit::new(
     /// #    script_auth,
     /// #    "<Operating system>:snew:v0.1.0 (by u/<reddit username>)"
@@ -104,14 +108,23 @@ pub enum Error {
     /// A reqwest error. Will make more specific
     #[error("Reqwest returned an error.\nCaused by:\t{0}")]
     RequestError(#[from] reqwest::Error),
+
+    /// A authentication error
     #[error("Failed to authenticate towards the Reddit API.\nReason:\t{0}")]
     AuthenticationError(String),
+
     /// A JSON parsing error. Usually this means the response was missing some necessary fields, e.g. because you are not authenticated correctly.
     #[error(
         "Malformed JSON response from the Reddit API. Are you authenticated correctly?\nCaused by:\t{0}"
     )]
     APIParseError(#[from] serde_json::Error),
+
+    /// A invalid user_agent, usually
     #[error("Invalid header value. Either your user agent is malformed (only ASCII 32-127 allowed), or Reddit is returning disallowed characters in the access token. \nCaused by:\t{0}")]
     InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
+
+    /// This error occurs if you attempt to make some request that requires you to be logged in (e.g. script authentication), such as making a post.
+    #[error("This action is only allowed when logged in, not with application authentication.")]
+    NotLoggedInError,
     // KindParseError
 }

@@ -129,7 +129,7 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
             // Make sure the next HTTP request gets posts after the last one we fetched.
             self.after = listing.data.pagination.after;
 
-            let client = &self.client;
+            let client = self.client;
 
             // Add posts to the cached_posts array, converting from RawPost to Post in the process
             self.cached_posts.extend(
@@ -138,7 +138,7 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
                     .children
                     .into_iter()
                     .rev()
-                    .map(|raw| (raw, *client))
+                    .map(|raw| (raw, client))
                     .map(From::from),
             );
 
