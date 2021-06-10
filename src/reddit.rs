@@ -1,11 +1,7 @@
 //! Reddit API.
-use crate::auth::{Authenticator, Credentials, ScriptAuth, Token};
+use crate::auth::{AuthenticatedClient, Authenticator};
 use crate::things::*;
 
-use reqwest::{
-    blocking::{Client, Response},
-    header,
-};
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -16,33 +12,47 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// After following the instructions, you should be on [the reddit prefs page](https://www.reddit.com/prefs/apps). The client_id will be in the top left corner under the name you chose. The secret is marked clearly. Username and password are your regular login credentials.
 /// # Usage
 /// ```no_run
-/// use snew::{reddit::Reddit, auth::Credentials};
-/// let reddit = Reddit::script(
+/// use snew::{reddit::Reddit, auth::{ScriptAuthenticator, Credentials}};
+///
+/// let script_auth = ScriptAuthenticator::new(
 ///     Credentials {
 ///         client_id: String::from("client_id"),
 ///         client_secret: String::from("client_secret"),
 ///         username: String::from("reddit username"),
 ///         password: String::from("reddit password")
-///     },
+///     });
+///
+/// let reddit = Reddit::new(
+///     script_auth,
 ///     "<Operating system>:snew:v0.1.0 (by u/<reddit username>)"
-///     )
-///     .unwrap();
-/// println!("{:?}", reddit.me());
+///     ).unwrap();
+///
+/// println!("{:?}", reddit.me().unwrap());
 /// ```
 /// See also [`Reddit::subreddit`].
 #[derive(Debug)]
-pub struct Reddit {
-    client: Client,
-    token: Token,
+pub struct Reddit<T: Authenticator> {
+    client: AuthenticatedClient<T>,
     url: String,
 }
 
 // The API calls.
-impl Reddit {
+impl<T: Authenticator> Reddit<T> {
+    /// Creates a new API connection, using the given authenticator.
+    pub fn new(authenticator: T, user_agent: &str) -> Result<Self> {
+        let client = AuthenticatedClient::new(authenticator, user_agent)?;
+
+        Ok(Self {
+            client,
+            url: String::from("https://oauth.reddit.com/"),
+        })
+    }
+
     /// Get information about the user, useful for debugging.
     pub fn me(&self) -> Result<Me> {
-        let response = self.get("api/v1/me")?;
-
+        let response = self
+            .client
+            .get(format!("{}{}", self.url, "api/v1/me").as_str(), None::<&()>)?;
         Ok(response.json()?)
     }
 
@@ -50,17 +60,19 @@ impl Reddit {
     /// # Usage
     /// ```no_run
     /// # fn main() -> snew::reddit::Result<()> {
-    /// use snew::{reddit::Reddit, auth::Credentials};
-    /// let reddit = Reddit::script(
-    ///     Credentials {
-    ///         client_id: String::from("client_id"),
-    ///         client_secret: String::from("client_secret"),
-    ///         username: String::from("reddit username"),
-    ///         password: String::from("reddit password")
-    ///     },
-    ///     "<Operating system>:snew:v0.1.0 (by u/<reddit username>)"
-    ///     )
-    ///     .unwrap();
+    /// # use snew::{reddit::Reddit, auth::{ScriptAuthenticator, Credentials}};
+    /// # let script_auth = ScriptAuthenticator::new(
+    /// #   Credentials {
+    /// #        client_id: String::from("client_id"),
+    /// #        client_secret: String::from("client_secret"),
+    /// #        username: String::from("reddit username"),
+    /// #        password: String::from("reddit password")
+    /// #    });
+    /// # let reddit = Reddit::new(
+    /// #    script_auth,
+    /// #    "<Operating system>:snew:v0.1.0 (by u/<reddit username>)"
+    /// #    ).unwrap();
+    /// // login process omitted
     ///
     /// let rust = reddit.subreddit("rust");
     ///
@@ -81,63 +93,8 @@ impl Reddit {
     /// # Ok(())
     /// # }
 
-    pub fn subreddit(&self, name: &str) -> Subreddit {
+    pub fn subreddit(&self, name: &str) -> Subreddit<T> {
         Subreddit::create(format!("{}r/{}", self.url, name).as_str(), &self.client)
-    }
-
-    // Make a get request to self.url with the given path, without any queries.
-    fn get(&self, path: &str) -> Result<Response> {
-        Ok(self
-            .client
-            .get(format!("{}{}", self.url, path))
-            .send()
-            .map_err(|err| Error::RequestError(err))?)
-    }
-}
-
-// General implementations
-impl Reddit {
-    /// Creates a new API connection, using the given authenticator.
-    pub fn new<T>(authenticator: T, user_agent: &str) -> Result<Self>
-    where
-        T: Authenticator,
-    {
-        match authenticator.get_token() {
-            Ok(token) => {
-                let client = Reddit::make_client(user_agent, token.access_token.as_str())?;
-                Ok(Self {
-                    client,
-                    token,
-                    url: String::from("https://oauth.reddit.com/"),
-                })
-            }
-            Err(err) => Err(err),
-        }
-    }
-
-    /// Convenience method for creating a new script API connection.
-    pub fn script(creds: Credentials, user_agent: &str) -> Result<Self> {
-        let script_auth = ScriptAuth::new(creds);
-
-        Reddit::new(script_auth, user_agent)
-    }
-
-    fn make_client(user_agent: &str, access_token: &str) -> Result<Client> {
-        let mut headers = header::HeaderMap::new();
-
-        headers.insert(
-            header::AUTHORIZATION,
-            header::HeaderValue::from_str(format!("bearer {}", access_token).as_str())?,
-        );
-        headers.insert(
-            header::USER_AGENT,
-            header::HeaderValue::from_str(user_agent)?,
-        );
-
-        Ok(Client::builder()
-            .user_agent(user_agent)
-            .default_headers(headers)
-            .build()?)
     }
 }
 
@@ -147,6 +104,8 @@ pub enum Error {
     /// A reqwest error. Will make more specific
     #[error("Reqwest returned an error.\nCaused by:\t{0}")]
     RequestError(#[from] reqwest::Error),
+    #[error("Failed to authenticate towards the Reddit API.\nReason:\t{0}")]
+    AuthenticationError(String),
     /// A JSON parsing error. Usually this means the response was missing some necessary fields, e.g. because you are not authenticated correctly.
     #[error(
         "Malformed JSON response from the Reddit API. Are you authenticated correctly?\nCaused by:\t{0}"
