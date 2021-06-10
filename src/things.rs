@@ -1,42 +1,45 @@
 //! Reddit 'things'. In the API, a thing is a type + fullname.
-use reqwest::blocking::Client;
 use serde::Deserialize;
 
 use self::raw::{generic_kind::RawKind, listing::RawListing, post::RawPostData};
-use crate::reddit::{Error, Result};
+use crate::{
+    auth::{AuthenticatedClient, Authenticator},
+    reddit::{Error, Result},
+};
 
 /// A handle to interact with a subreddit.
 /// See [`PostFeed`] for some gotchas when iterating over Posts.
 #[derive(Debug)]
-pub struct Subreddit<'a> {
+pub struct Subreddit<'a, T: Authenticator> {
     pub url: String,
-    client: &'a Client,
+    client: &'a AuthenticatedClient<T>,
 }
 
-impl<'a> Subreddit<'a> {
-    pub fn create(url: &str, client: &'a Client) -> Self {
+impl<'a, T: Authenticator> Subreddit<'a, T> {
+    pub fn create(url: &str, client: &'a AuthenticatedClient<T>) -> Self {
         Self {
             url: String::from(url),
             client,
         }
     }
-    pub fn hot(&self) -> PostFeed {
+    pub fn hot(&self) -> PostFeed<T> {
         self.posts_sorted("hot")
     }
-    pub fn new(&self) -> PostFeed {
+    #[allow(clippy::clippy::new_ret_no_self)]
+    pub fn new(&self) -> PostFeed<T> {
         self.posts_sorted("new")
     }
-    pub fn random(&self) -> PostFeed {
+    pub fn random(&self) -> PostFeed<T> {
         self.posts_sorted("random")
     }
-    pub fn rising(&self) -> PostFeed {
+    pub fn rising(&self) -> PostFeed<T> {
         self.posts_sorted("rising")
     }
-    pub fn top(&self) -> PostFeed {
+    pub fn top(&self) -> PostFeed<T> {
         self.posts_sorted("top")
     }
 
-    fn posts_sorted(&self, path: &str) -> PostFeed {
+    fn posts_sorted(&self, path: &str) -> PostFeed<T> {
         PostFeed {
             limit: 100,
             url: format!("{}/{}", self.url, path),
@@ -49,8 +52,8 @@ impl<'a> Subreddit<'a> {
 
 /// A post.
 #[derive(Debug, Clone)]
-pub struct Post<'a> {
-    client: &'a Client,
+pub struct Post<'a, T: Authenticator> {
+    client: &'a AuthenticatedClient<T>,
     pub title: String,
     /// Upvotes.
     pub ups: i32,
@@ -68,8 +71,8 @@ pub struct Post<'a> {
     pub kind: String,
 }
 
-impl<'a> Post<'a> {
-    pub fn comments(&self) -> CommentFeed {
+impl<'a, T: Authenticator> Post<'a, T> {
+    pub fn comments(&self) -> CommentFeed<T> {
         CommentFeed {
             client: self.client,
             url: self.url.clone(),
@@ -82,7 +85,7 @@ impl<'a> Post<'a> {
 /// Represents interacting with a set of posts, meant to be iterated over. As long as there are posts to iterate over, this iterator will continue. You may wish to take() some elements.
 /// The iterator returns a Result<Post, Error>. The errors are either from the HTTP request or the JSON parsing.
 #[derive(Debug)]
-pub struct PostFeed<'a> {
+pub struct PostFeed<'a, T: Authenticator> {
     /// The amount of posts to request from the Reddit API. This does not mean you can only iterate over this many posts.
     /// The Iterator will simply make more requests if you iterate over more than this limit.
     /// You should set this to a specific number if you know that you will be making some exact number of requests < 100, so
@@ -90,24 +93,25 @@ pub struct PostFeed<'a> {
     /// which is 100, the max Reddit allows.
     pub limit: i32,
     url: String,
-    cached_posts: Vec<Post<'a>>,
-    client: &'a Client,
+    cached_posts: Vec<Post<'a, T>>,
+    client: &'a AuthenticatedClient<T>,
     after: String,
 }
 
-impl<'a> Iterator for PostFeed<'a> {
-    type Item = Result<Post<'a>>;
+impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
+    type Item = Result<Post<'a, T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(post) = self.cached_posts.pop() {
             Some(Ok(post))
         } else {
-            let res = self
-                .client
-                .get(self.url.as_str())
-                .query(&[("limit", self.limit)])
-                .query(&[("after", self.after.as_str())])
-                .send();
+            let res = self.client.get(
+                self.url.as_str(),
+                Some(&[
+                    ("limit", self.limit.to_string()),
+                    ("after", self.after.clone()),
+                ]),
+            );
             // Probably some cleaner way to do this
             let listing = match res {
                 Ok(response) => match response.text() {
@@ -119,7 +123,7 @@ impl<'a> Iterator for PostFeed<'a> {
                     },
                     Err(err) => return Some(Err(Error::RequestError(err))),
                 },
-                Err(err) => return Some(Err(Error::RequestError(err))),
+                Err(err) => return Some(Err(err)),
             };
 
             // Make sure the next HTTP request gets posts after the last one we fetched.
@@ -139,11 +143,7 @@ impl<'a> Iterator for PostFeed<'a> {
             );
 
             let post = self.cached_posts.pop();
-            if let Some(post) = post {
-                Some(Ok(post))
-            } else {
-                None
-            }
+            post.map(Ok)
         }
     }
 }
@@ -155,9 +155,9 @@ pub struct Comment {
 }
 
 #[derive(Debug)]
-pub struct CommentFeed<'a> {
+pub struct CommentFeed<'a, T: Authenticator> {
     url: String,
-    client: &'a Client,
+    client: &'a AuthenticatedClient<T>,
     cached_comments: Vec<Comment>,
 }
 
@@ -172,8 +172,10 @@ pub struct Me {
 }
 
 // Create a post from som raw data.
-impl<'a> From<(RawKind<RawPostData>, &'a Client)> for Post<'a> {
-    fn from(raw: (RawKind<RawPostData>, &'a Client)) -> Self {
+impl<'a, T: Authenticator> From<(RawKind<RawPostData>, &'a AuthenticatedClient<T>)>
+    for Post<'a, T>
+{
+    fn from(raw: (RawKind<RawPostData>, &'a AuthenticatedClient<T>)) -> Self {
         let (raw, client) = raw;
         Self {
             client,
