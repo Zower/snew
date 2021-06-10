@@ -6,7 +6,7 @@ use self::raw::{generic_kind::RawKind, listing::RawListing, post::RawPostData};
 use crate::reddit::{Error, Result};
 
 /// A handle to interact with a subreddit.
-/// See [`Posts`] for some gotchas when iterating over Posts.
+/// See [`PostFeed`] for some gotchas when iterating over Posts.
 #[derive(Debug)]
 pub struct Subreddit<'a> {
     pub url: String,
@@ -20,33 +20,24 @@ impl<'a> Subreddit<'a> {
             client,
         }
     }
-    pub fn hot(&self) -> Posts {
+    pub fn hot(&self) -> PostFeed {
         self.posts_sorted("hot")
     }
-    pub fn new(&self) -> Posts {
+    pub fn new(&self) -> PostFeed {
         self.posts_sorted("new")
     }
-    pub fn random(&self) -> Posts {
+    pub fn random(&self) -> PostFeed {
         self.posts_sorted("random")
     }
-    pub fn rising(&self) -> Posts {
+    pub fn rising(&self) -> PostFeed {
         self.posts_sorted("rising")
     }
-    pub fn top(&self) -> Posts {
+    pub fn top(&self) -> PostFeed {
         self.posts_sorted("top")
     }
 
-    /// Get an iterator over the comment trees of the supplied post.
-    pub fn comments(&self, post: &Post) -> Comments {
-        Comments {
-            url: format!("{}/comments/{}", self.url, post.id.as_str()),
-            client: self.client,
-            cached_comments: Vec::new(),
-        }
-    }
-
-    fn posts_sorted(&self, path: &str) -> Posts {
-        Posts {
+    fn posts_sorted(&self, path: &str) -> PostFeed {
+        PostFeed {
             limit: 100,
             url: format!("{}/{}", self.url, path),
             cached_posts: Vec::new(),
@@ -58,7 +49,8 @@ impl<'a> Subreddit<'a> {
 
 /// A post.
 #[derive(Debug, Clone)]
-pub struct Post {
+pub struct Post<'a> {
+    client: &'a Client,
     pub title: String,
     /// Upvotes.
     pub ups: i32,
@@ -76,10 +68,21 @@ pub struct Post {
     pub kind: String,
 }
 
+impl<'a> Post<'a> {
+    pub fn comments(&self) -> CommentFeed {
+        CommentFeed {
+            client: self.client,
+            url: self.url.clone(),
+            // url: format!("{}/comments/{}", self.url),
+            cached_comments: Vec::new(),
+        }
+    }
+}
+
 /// Represents interacting with a set of posts, meant to be iterated over. As long as there are posts to iterate over, this iterator will continue. You may wish to take() some elements.
 /// The iterator returns a Result<Post, Error>. The errors are either from the HTTP request or the JSON parsing.
 #[derive(Debug)]
-pub struct Posts<'a> {
+pub struct PostFeed<'a> {
     /// The amount of posts to request from the Reddit API. This does not mean you can only iterate over this many posts.
     /// The Iterator will simply make more requests if you iterate over more than this limit.
     /// You should set this to a specific number if you know that you will be making some exact number of requests < 100, so
@@ -87,13 +90,13 @@ pub struct Posts<'a> {
     /// which is 100, the max Reddit allows.
     pub limit: i32,
     url: String,
-    cached_posts: Vec<Post>,
+    cached_posts: Vec<Post<'a>>,
     client: &'a Client,
     after: String,
 }
 
-impl<'a> Iterator for Posts<'a> {
-    type Item = Result<Post>;
+impl<'a> Iterator for PostFeed<'a> {
+    type Item = Result<Post<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(post) = self.cached_posts.pop() {
@@ -122,9 +125,18 @@ impl<'a> Iterator for Posts<'a> {
             // Make sure the next HTTP request gets posts after the last one we fetched.
             self.after = listing.data.pagination.after;
 
+            let client = &self.client;
+
             // Add posts to the cached_posts array, converting from RawPost to Post in the process
-            self.cached_posts
-                .extend(listing.data.children.into_iter().rev().map(From::from));
+            self.cached_posts.extend(
+                listing
+                    .data
+                    .children
+                    .into_iter()
+                    .rev()
+                    .map(|raw| (raw, *client))
+                    .map(From::from),
+            );
 
             let post = self.cached_posts.pop();
             if let Some(post) = post {
@@ -143,7 +155,7 @@ pub struct Comment {
 }
 
 #[derive(Debug)]
-pub struct Comments<'a> {
+pub struct CommentFeed<'a> {
     url: String,
     client: &'a Client,
     cached_comments: Vec<Comment>,
@@ -160,9 +172,11 @@ pub struct Me {
 }
 
 // Create a post from som raw data.
-impl From<RawKind<RawPostData>> for Post {
-    fn from(raw: RawKind<RawPostData>) -> Self {
+impl<'a> From<(RawKind<RawPostData>, &'a Client)> for Post<'a> {
+    fn from(raw: (RawKind<RawPostData>, &'a Client)) -> Self {
+        let (raw, client) = raw;
         Self {
+            client,
             title: raw.data.title,
             ups: raw.data.ups,
             downs: raw.data.downs,

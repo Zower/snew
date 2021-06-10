@@ -28,3 +28,4 @@
 pub mod auth;
 pub mod reddit;
 pub mod things;
+mod unsafe_tests;
