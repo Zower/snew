@@ -9,6 +9,8 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Test
+      env: 
+        REDDIT_USERNAME: zower98
       run: cargo test -- --nocapture
     - name: Format
       run: cargo fmt -- --check 
