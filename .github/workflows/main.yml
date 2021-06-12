@@ -14,6 +14,6 @@ jobs:
         REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
         REDDIT_USERNAME: zower98
         REDDIT_PASSWORD: ${{ secrets.REDDIT_PASSWORD }}
-      run: cargo test -- --nocapture
+      run: cargo test
     - name: Format
       run: cargo fmt -- --check 
