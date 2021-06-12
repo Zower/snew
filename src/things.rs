@@ -1,7 +1,9 @@
 //! Reddit 'things'. In the API, a thing is a type + fullname.
 use serde::Deserialize;
 
-use self::raw::{generic_kind::RawKind, listing::RawListing, post::RawPostData};
+use self::raw::{
+    comment::RawCommentData, generic_kind::RawKind, listing::RawListing, post::RawPostData,
+};
 use crate::{
     auth::{AuthenticatedClient, Authenticator},
     reddit::{Error, Result},
@@ -75,8 +77,7 @@ impl<'a, T: Authenticator> Post<'a, T> {
     pub fn comments(&self) -> CommentFeed<T> {
         CommentFeed {
             client: self.client,
-            url: self.url.clone(),
-            // url: format!("{}/comments/{}", self.url),
+            url: format!("{}comments/{}", crate::reddit::URL, self.id),
             cached_comments: Vec::new(),
         }
     }
@@ -115,19 +116,23 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
             // Probably some cleaner way to do this
             let listing = match res {
                 Ok(response) => match response.text() {
-                    Ok(text) => match serde_json::from_str::<RawListing<RawKind<RawPostData>>>(
-                        text.as_str(),
-                    ) {
-                        Ok(raw) => raw,
-                        Err(err) => return Some(Err(Error::APIParseError(err))),
-                    },
+                    Ok(text) => {
+                        match serde_json::from_str::<RawListing<RawKind<RawPostData>>>(
+                            text.as_str(),
+                        ) {
+                            Ok(raw) => raw,
+                            Err(err) => return Some(Err(Error::APIParseError(err))),
+                        }
+                    }
                     Err(err) => return Some(Err(Error::RequestError(err))),
                 },
                 Err(err) => return Some(Err(err)),
             };
 
             // Make sure the next HTTP request gets posts after the last one we fetched.
-            self.after = listing.data.pagination.after;
+            if let Some(after) = listing.data.pagination.after {
+                self.after = after;
+            }
 
             let client = self.client;
 
@@ -152,13 +157,61 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
 #[derive(Debug)]
 pub struct Comment {
     pub author: String,
+    // pub body: String,
 }
 
+/// A set of comments, meant to be iterated over.
 #[derive(Debug)]
 pub struct CommentFeed<'a, T: Authenticator> {
     url: String,
     client: &'a AuthenticatedClient<T>,
     cached_comments: Vec<Comment>,
+}
+impl<'a, T: Authenticator> Iterator for CommentFeed<'a, T> {
+    type Item = Result<Comment>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(comment) = self.cached_comments.pop() {
+            Some(Ok(comment))
+        } else {
+            todo!();
+            // let res = self.client.get(self.url.as_str(), None::<&()>);
+            let res = self.client.get(
+                self.url.as_str(),
+                Some(&[("limit", "1"), ("raw_json", "1")]),
+            );
+            // Probably some cleaner way to do this
+            // Comments are a list of listings.
+            let listings = match res {
+                Ok(response) => match response.text() {
+                    Ok(text) => {
+                        match serde_json::from_str::<Vec<RawListing<RawKind<serde_json::Value>>>>(
+                            text.as_str(),
+                        ) {
+                            Ok(raw) => raw,
+                            Err(err) => return Some(Err(Error::APIParseError(err))),
+                        }
+                    }
+                    Err(err) => return Some(Err(Error::RequestError(err))),
+                },
+                Err(err) => return Some(Err(err)),
+            };
+
+            // Add posts to the cached_commments array, converting from RawComment to Comment in the process
+            // self.cached_comments.extend(
+            //     listings
+            //         .remove(1)
+            //         .data
+            //         .children
+            //         .into_iter()
+            //         .rev()
+            //         .map(From::from),
+            // );
+
+            let comment = self.cached_comments.pop();
+            comment.map(Ok)
+        }
+    }
 }
 
 /// Information about the authenticated user
@@ -191,6 +244,17 @@ impl<'a, T: Authenticator> From<(RawKind<RawPostData>, &'a AuthenticatedClient<T
     }
 }
 
+// Create a comment from som raw data.
+impl From<RawKind<RawCommentData>> for Comment {
+    fn from(raw: RawKind<RawCommentData>) -> Self {
+        Self {
+            author: String::from("test")
+            // author: raw.data.author,
+            // body: raw.data.body,
+        }
+    }
+}
+
 // Not used yet
 // pub enum Kind {
 //     Comment,
@@ -219,8 +283,8 @@ pub mod raw {
 
     #[derive(Debug, Clone, Deserialize)]
     pub struct Pagination {
-        pub after: String,
-        // pub before: String,
+        pub after: Option<String>,
+        pub before: Option<String>,
     }
 
     pub mod listing {
@@ -269,7 +333,10 @@ pub mod raw {
     pub mod comment {
         use serde::Deserialize;
 
-        #[derive(Debug, Deserialize)]
-        pub struct RawComment {}
+        #[derive(Debug, Clone, Deserialize)]
+        pub struct RawCommentData {
+            // pub author: String,
+        // pub body: String,
+        }
     }
 }

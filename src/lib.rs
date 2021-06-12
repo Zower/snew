@@ -50,4 +50,5 @@
 #![deny(unsafe_code)]
 pub mod auth;
 pub mod reddit;
+mod tests;
 pub mod things;
