@@ -7,8 +7,6 @@ See the documentation. You can build it yourself in the regular manner. Clone th
 cargo doc --open
 ```
 
-Unit tests are not included in this repo, as they have to include secret and password.
-
 # User agent 
 Recommended format for the user_agent
 ```
