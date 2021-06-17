@@ -38,32 +38,30 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn comments() -> Result<()> {
-    //     let script_auth = ScriptAuthenticator::new(Credentials::new(
-    //          env::var("REDDIT_CLIENT_ID").unwrap().as_str(),
-    //          env::var("REDDIT_CLIENT_SECRET").unwrap().as_str(),
-    //          env::var("REDDIT_USERNAME").unwrap().as_str(),
-    //          env::var("REDDIT_PASSWORD").unwrap().as_str(),
-    //     ));
-    //
-    //     let reddit = Reddit::new(script_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
-    //
-    //     let rust = reddit.subreddit("rust");
-    //
-    //     for post in rust.top().take(1) {
-    //         let post = post?;
-    //         for comment in post.comments().take(1) {
-    //             match comment {
-    //                 Ok(comment) => println!("{:?}", comment),
-    //                 Err(err) => println!("{}", err),
-    //             }
-    //         }
-    //         println!("{:?}", post.comments())
-    //     }
-    //
-    //     Ok(())
-    // }
+    #[test]
+    fn comments() -> Result<()> {
+        let script_auth = ScriptAuthenticator::new(Credentials::new(
+            env::var("REDDIT_CLIENT_ID").unwrap().as_str(),
+            env::var("REDDIT_CLIENT_SECRET").unwrap().as_str(),
+            env::var("REDDIT_USERNAME").unwrap().as_str(),
+            env::var("REDDIT_PASSWORD").unwrap().as_str(),
+        ));
+
+        let reddit = Reddit::new(script_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
+
+        let python = reddit.subreddit("python");
+
+        for post in python.hot().take(1) {
+            let post = post?;
+            println!("Post: {}", post.title);
+            for comment in post.comments().take(5) {
+                let comment = comment?;
+                println!("By: {}, {}", comment.author, comment.body);
+            }
+        }
+
+        Ok(())
+    }
 
     #[test]
     #[should_panic]

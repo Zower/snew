@@ -36,6 +36,7 @@ pub struct Token {
 }
 
 /// Authenticated interaction with the Reddit API. Use [`crate::reddit::Reddit`] instead.
+/// This is shared by all current interactors with what reddit calls 'things', so they can make requests for more posts, comments, etc.
 #[derive(Debug)]
 pub struct AuthenticatedClient<T: Authenticator> {
     pub client: RefCell<Client>,
@@ -61,6 +62,7 @@ impl<T: Authenticator> AuthenticatedClient<T> {
     }
 
     /// Make a get request to `url`
+    /// Errors if the status code was unexpected, the client cannot re-initialize or make the request, or if the authentication fails.
     pub fn get<Q: Serialize>(&self, url: &str, queries: Option<&Q>) -> Result<Response> {
         // Make one request
         let mut client = self.client.borrow_mut();

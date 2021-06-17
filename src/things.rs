@@ -18,6 +18,8 @@ pub struct Subreddit<'a, T: Authenticator> {
 }
 
 impl<'a, T: Authenticator> Subreddit<'a, T> {
+    /// Create a instance of a subreddit
+    /// Use [`crate::reddit::Reddit::subreddit()`] instead, when possible.
     pub fn create(url: &str, client: &'a AuthenticatedClient<T>) -> Self {
         Self {
             url: String::from(url),
@@ -27,6 +29,8 @@ impl<'a, T: Authenticator> Subreddit<'a, T> {
     pub fn hot(&self) -> PostFeed<T> {
         self.posts_sorted("hot")
     }
+    // new() is usually reserved for creating a instance of the struct
+    // Inconsistent to put new_sorting, and much easier to use this way than to use x_sorting for all the functions
     #[allow(clippy::clippy::new_ret_no_self)]
     pub fn new(&self) -> PostFeed<T> {
         self.posts_sorted("new")
@@ -67,6 +71,8 @@ pub struct Post<'a, T: Authenticator> {
     pub author: String,
     /// The text of this post.
     pub selftext: String,
+    /// The subreddit this post belongs to
+    pub subreddit: String,
     /// The unique base 36 ID of this post
     pub id: String,
     /// The 'kind'. This should always be t3. Combine with [`Self::id`] to get the fullname of this post.
@@ -77,7 +83,12 @@ impl<'a, T: Authenticator> Post<'a, T> {
     pub fn comments(&self) -> CommentFeed<T> {
         CommentFeed {
             client: self.client,
-            url: format!("{}comments/{}", crate::reddit::URL, self.id),
+            url: format!(
+                "{}r/{}/comments/{}",
+                crate::reddit::URL,
+                self.subreddit,
+                self.id
+            ),
             cached_comments: Vec::new(),
         }
     }
@@ -157,7 +168,8 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
 #[derive(Debug)]
 pub struct Comment {
     pub author: String,
-    // pub body: String,
+    pub body: String,
+    pub id: String,
 }
 
 /// A set of comments, meant to be iterated over.
@@ -174,18 +186,13 @@ impl<'a, T: Authenticator> Iterator for CommentFeed<'a, T> {
         if let Some(comment) = self.cached_comments.pop() {
             Some(Ok(comment))
         } else {
-            todo!();
-            // let res = self.client.get(self.url.as_str(), None::<&()>);
-            let res = self.client.get(
-                self.url.as_str(),
-                Some(&[("limit", "1"), ("raw_json", "1")]),
-            );
+            let res = self.client.get(self.url.as_str(), None::<&()>);
             // Probably some cleaner way to do this
             // Comments are a list of listings.
             let listings = match res {
                 Ok(response) => match response.text() {
                     Ok(text) => {
-                        match serde_json::from_str::<Vec<RawListing<RawKind<serde_json::Value>>>>(
+                        match serde_json::from_str::<(Empty, RawListing<RawKind<RawCommentData>>)>(
                             text.as_str(),
                         ) {
                             Ok(raw) => raw,
@@ -197,16 +204,12 @@ impl<'a, T: Authenticator> Iterator for CommentFeed<'a, T> {
                 Err(err) => return Some(Err(err)),
             };
 
-            // Add posts to the cached_commments array, converting from RawComment to Comment in the process
-            // self.cached_comments.extend(
-            //     listings
-            //         .remove(1)
-            //         .data
-            //         .children
-            //         .into_iter()
-            //         .rev()
-            //         .map(From::from),
-            // );
+            // The first listing returned by reddit is the post the comments belong to (smh..), the second listing are the comments, so we just ignore the first element of the tuple.
+            let (_, comments) = listings;
+
+            // Add comments to the cached_commments array, converting from RawComment to Comment in the process
+            self.cached_comments
+                .extend(comments.data.children.into_iter().rev().map(From::from));
 
             let comment = self.cached_comments.pop();
             comment.map(Ok)
@@ -237,6 +240,7 @@ impl<'a, T: Authenticator> From<(RawKind<RawPostData>, &'a AuthenticatedClient<T
             downs: raw.data.downs,
             url: raw.data.url,
             author: raw.data.author,
+            subreddit: raw.data.subreddit,
             selftext: raw.data.selftext,
             id: raw.data.id,
             kind: raw.kind,
@@ -248,9 +252,9 @@ impl<'a, T: Authenticator> From<(RawKind<RawPostData>, &'a AuthenticatedClient<T
 impl From<RawKind<RawCommentData>> for Comment {
     fn from(raw: RawKind<RawCommentData>) -> Self {
         Self {
-            author: String::from("test")
-            // author: raw.data.author,
-            // body: raw.data.body,
+            author: raw.data.author,
+            id: raw.data.id,
+            body: raw.data.body,
         }
     }
 }
@@ -276,15 +280,19 @@ impl From<RawKind<RawCommentData>> for Comment {
 //     }
 // }
 
-// The raw responses from Reddit. The interpreted structs like [`crate::things::Subreddit`] and [`crate::things::Post`] are meant to be used instead of these, and should cover regular usecases.
+// Discard all the JSON data
+#[derive(Deserialize, Debug)]
+struct Empty {}
+
+// The raw responses from Reddit. The interpreted structs like [`crate::things::Subreddit`] and [`crate::things::Post`] are meant to be used.
 #[doc(hidden)]
 pub mod raw {
     use serde::Deserialize;
 
     #[derive(Debug, Clone, Deserialize)]
     pub struct Pagination {
-        pub after: Option<String>,
-        pub before: Option<String>,
+        pub(crate) after: Option<String>,
+        pub(crate) before: Option<String>,
     }
 
     pub mod listing {
@@ -294,14 +302,14 @@ pub mod raw {
         // Listings from Reddit take this form.
         #[derive(Debug, Clone, Deserialize)]
         pub struct RawListing<T> {
-            pub data: RawListingData<T>,
+            pub(crate) data: RawListingData<T>,
         }
 
         #[derive(Debug, Clone, Deserialize)]
         pub struct RawListingData<T> {
             #[serde(flatten)]
-            pub pagination: Pagination,
-            pub children: Vec<T>,
+            pub(crate) pagination: Pagination,
+            pub(crate) children: Vec<T>,
         }
     }
 
@@ -310,8 +318,8 @@ pub mod raw {
 
         #[derive(Debug, Deserialize)]
         pub struct RawKind<T> {
-            pub data: T,
-            pub kind: String,
+            pub(crate) data: T,
+            pub(crate) kind: String,
         }
     }
 
@@ -320,13 +328,14 @@ pub mod raw {
 
         #[derive(Debug, Clone, Deserialize)]
         pub struct RawPostData {
-            pub title: String,
-            pub ups: i32,
-            pub downs: i32,
-            pub url: String,
-            pub author: String,
-            pub selftext: String,
-            pub id: String,
+            pub(crate) title: String,
+            pub(crate) ups: i32,
+            pub(crate) downs: i32,
+            pub(crate) url: String,
+            pub(crate) author: String,
+            pub(crate) subreddit: String,
+            pub(crate) selftext: String,
+            pub(crate) id: String,
         }
     }
 
@@ -335,8 +344,9 @@ pub mod raw {
 
         #[derive(Debug, Clone, Deserialize)]
         pub struct RawCommentData {
-            // pub author: String,
-        // pub body: String,
+            pub(crate) author: String,
+            pub(crate) body: String,
+            pub(crate) id: String,
         }
     }
 }
