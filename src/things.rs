@@ -209,16 +209,15 @@ pub struct Me {
     pub verified: bool,
 }
 
-pub trait Transpose <T> {
+pub trait Transpose<T> {
     fn or_else_transpose<F: FnOnce() -> Result<Option<T>>>(self, f: F) -> Option<Result<T>>;
 }
 
-impl <T> Transpose<T> for Option<Result<T>> {
+impl<T> Transpose<T> for Option<Result<T>> {
     fn or_else_transpose<F: FnOnce() -> Result<Option<T>>>(self, f: F) -> Option<Result<T>> {
         if let None = self {
             f().transpose()
-        }
-        else {
+        } else {
             self
         }
     }
