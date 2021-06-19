@@ -10,10 +10,10 @@ mod tests {
     #[test]
     fn it_works() -> Result<()> {
         let script_auth = ScriptAuthenticator::new(Credentials::new(
-            env::var("REDDIT_CLIENT_ID").unwrap().as_str(),
-            env::var("REDDIT_CLIENT_SECRET").unwrap().as_str(),
-            env::var("REDDIT_USERNAME").unwrap().as_str(),
-            env::var("REDDIT_PASSWORD").unwrap().as_str(),
+            &env::var("REDDIT_CLIENT_ID").unwrap(),
+            &env::var("REDDIT_CLIENT_SECRET").unwrap(),
+            &env::var("REDDIT_USERNAME").unwrap(),
+            &env::var("REDDIT_PASSWORD").unwrap(),
         ));
         let reddit = Reddit::new(script_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
 
@@ -25,8 +25,8 @@ mod tests {
     #[test]
     fn anonymous() -> Result<()> {
         let application_auth = ApplicationAuthenticator::new(
-            env::var("REDDIT_CLIENT_ID").unwrap().as_str(),
-            env::var("REDDIT_CLIENT_SECRET").unwrap().as_str(),
+            &env::var("REDDIT_CLIENT_ID").unwrap(),
+            &env::var("REDDIT_CLIENT_SECRET").unwrap(),
         );
         let reddit = Reddit::new(application_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
 
@@ -41,10 +41,10 @@ mod tests {
     #[test]
     fn comments() -> Result<()> {
         let script_auth = ScriptAuthenticator::new(Credentials::new(
-            env::var("REDDIT_CLIENT_ID").unwrap().as_str(),
-            env::var("REDDIT_CLIENT_SECRET").unwrap().as_str(),
-            env::var("REDDIT_USERNAME").unwrap().as_str(),
-            env::var("REDDIT_PASSWORD").unwrap().as_str(),
+            &env::var("REDDIT_CLIENT_ID").unwrap(),
+            &env::var("REDDIT_CLIENT_SECRET").unwrap(),
+            &env::var("REDDIT_USERNAME").unwrap(),
+            &env::var("REDDIT_PASSWORD").unwrap(),
         ));
 
         let reddit = Reddit::new(script_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
@@ -67,8 +67,8 @@ mod tests {
     #[should_panic]
     fn unauthorized_anonoymous() {
         let application_auth = ApplicationAuthenticator::new(
-            env::var("REDDIT_CLIENT_ID").unwrap().as_str(),
-            env::var("REDDIT_CLIENT_SECRET").unwrap().as_str(),
+            &env::var("REDDIT_CLIENT_ID").unwrap(),
+            &env::var("REDDIT_CLIENT_SECRET").unwrap(),
         );
         let reddit = Reddit::new(application_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
 

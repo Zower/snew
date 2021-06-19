@@ -53,10 +53,10 @@ impl<T: Authenticator> Reddit<T> {
     pub fn me(&self) -> Result<Me> {
         if self.client.authenticator.borrow().is_user() {
             Ok(serde_json::from_str(
-                self.client
-                    .get(format!("{}{}", self.url, "api/v1/me").as_str(), None::<&()>)?
-                    .text()?
-                    .as_str(),
+                &self
+                    .client
+                    .get(&format!("{}{}", self.url, "api/v1/me"), None::<&()>)?
+                    .text()?,
             )?)
         } else {
             Err(Error::NotLoggedInError)
@@ -107,7 +107,7 @@ impl<T: Authenticator> Reddit<T> {
     // /// Equivalent to calling [`Subreddit::submit`], prefer using that if you already have a handle into the subreddit.
     // pub fn submit(&self, subreddit: &str, title: &str, text: &str) -> Post<T> {
     //     Subreddit::create(
-    //         format!("{}r/{}", self.url, subreddit).as_str(),
+    //         &format!("{}r/{}", self.url, subreddit),
     //         &self.client,
     //     )
     //     .submit(title, text)

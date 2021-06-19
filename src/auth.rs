@@ -49,7 +49,7 @@ impl<T: Authenticator> AuthenticatedClient<T> {
         authenticator.login()?;
 
         if let Some(token) = authenticator.token() {
-            let client = Self::make_client(user_agent, token.access_token.as_str())?;
+            let client = Self::make_client(user_agent, &token.access_token)?;
             Ok(Self {
                 authenticator: RefCell::new(authenticator),
                 client: RefCell::new(client),
@@ -79,7 +79,7 @@ impl<T: Authenticator> AuthenticatedClient<T> {
 
             if let Some(token) = authenticator.token() {
                 // Create a new client with correct token
-                *client = Self::make_client(self.user_agent.as_str(), token.access_token.as_str())?;
+                *client = Self::make_client(&self.user_agent, &token.access_token)?;
             } else {
                 // Pretty sure this can never happen, but better safe than sorry? :D
                 return Err(Error::AuthenticationError(String::from("Token was not set after logging in, but no error was returned. Report bug at https://github.com/Zower/snew")));
@@ -135,7 +135,7 @@ impl<T: Authenticator> AuthenticatedClient<T> {
 
         headers.insert(
             header::AUTHORIZATION,
-            header::HeaderValue::from_str(format!("bearer {}", access_token).as_str())?,
+            header::HeaderValue::from_str(&format!("bearer {}", &access_token))?,
         );
         headers.insert(
             header::USER_AGENT,
@@ -203,8 +203,8 @@ impl Authenticator for ScriptAuthenticator {
             .post("https://www.reddit.com/api/v1/access_token")
             .query(&[
                 ("grant_type", "password"),
-                ("username", self.creds.username.as_str()),
-                ("password", self.creds.password.as_str()),
+                ("username", &self.creds.username),
+                ("password", &self.creds.password),
             ])
             .basic_auth(
                 self.creds.client_info.client_id.clone(),
@@ -214,7 +214,7 @@ impl Authenticator for ScriptAuthenticator {
 
         let status = response.status();
         let text = response.text()?;
-        let slice = text.as_str();
+        let slice = &text;
 
         // Parse the response as JSON.
         if let Ok(token) = serde_json::from_str::<Token>(slice) {
@@ -235,8 +235,7 @@ impl Authenticator for ScriptAuthenticator {
         else {
             return Err(Error::AuthenticationError(format!(
                 "Unexpected error occured, text: {}, code: {}",
-                text,
-                status.as_str()
+                text, &status
             )));
         }
         Ok(())
@@ -289,7 +288,7 @@ impl Authenticator for ApplicationAuthenticator {
 
         let status = response.status();
         let text = response.text()?;
-        let slice = text.as_str();
+        let slice = &text;
 
         // Parse the response as JSON.
         if let Ok(token) = serde_json::from_str::<Token>(slice) {
@@ -310,8 +309,7 @@ impl Authenticator for ApplicationAuthenticator {
         else {
             return Err(Error::AuthenticationError(format!(
                 "Unexpected error occured, text: {}, code: {}",
-                text,
-                status.as_str()
+                text, &status
             )));
         }
         Ok(())

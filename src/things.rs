@@ -50,7 +50,7 @@ impl<'a, T: Authenticator> Subreddit<'a, T> {
     // /// Submit a text post.
     // pub fn submit(&self, title: &str, text: &str) -> Post<T> {
     //     self.client.get(
-    //         format!("{}/api/submit", crate::reddit::URL).as_str(),
+    //         &format!("{}/api/submit", crate::reddit::URL),
     //         Some(&[("sr", self.name)]),
     //     );
     //     todo!()
@@ -131,7 +131,7 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
             let text = self
                 .client
                 .get(
-                    self.url.as_str(),
+                    &self.url,
                     Some(&[
                         ("limit", self.limit.to_string()),
                         ("after", self.after.clone()),
@@ -183,12 +183,12 @@ impl<'a, T: Authenticator> Iterator for CommentFeed<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.cached_comments.pop().map(Ok).or_else_transpose(|| {
-            let text = self.client.get(self.url.as_str(), None::<&()>)?.text()?;
+            let text = self.client.get(&self.url, None::<&()>)?.text()?;
 
             // The first listing returned by reddit is the post the comments belong to (smh..), the second listing are the comments.
             // So we just toss away all the json from the first element of the tuple.
             let listings: (Empty, RawListing<RawKind<RawCommentData>>) =
-                serde_json::from_str(text.as_str())?;
+                serde_json::from_str(&text)?;
 
             // Add comments to the cached_commments array, converting from RawComment to Comment in the process
             self.cached_comments
