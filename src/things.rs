@@ -127,7 +127,7 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
     type Item = Result<Post<'a, T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        or_else_transpose(self.cached_posts.pop().map(Ok), || {
+        self.cached_posts.pop().map(Ok).or_else_transpose(|| {
             let text = self
                 .client
                 .get(
@@ -182,7 +182,7 @@ impl<'a, T: Authenticator> Iterator for CommentFeed<'a, T> {
     type Item = Result<Comment>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        or_else_transpose(self.cached_comments.pop().map(Ok), || {
+        self.cached_comments.pop().map(Ok).or_else_transpose(|| {
             let text = self.client.get(self.url.as_str(), None::<&()>)?.text()?;
 
             // The first listing returned by reddit is the post the comments belong to (smh..), the second listing are the comments.
@@ -209,16 +209,31 @@ pub struct Me {
     pub verified: bool,
 }
 
-fn or_else_transpose<T, F>(opt: Option<Result<T>>, f: F) -> Option<Result<T>>
-where
-    F: FnOnce() -> Result<Option<T>>,
-{
-    if let None = opt {
-        f().transpose()
-    } else {
-        opt
+pub trait Transpose <T> {
+    fn or_else_transpose<F: FnOnce() -> Result<Option<T>>>(self, f: F) -> Option<Result<T>>;
+}
+
+impl <T> Transpose<T> for Option<Result<T>> {
+    fn or_else_transpose<F: FnOnce() -> Result<Option<T>>>(self, f: F) -> Option<Result<T>> {
+        if let None = self {
+            f().transpose()
+        }
+        else {
+            self
+        }
     }
 }
+
+// fn or_else_transpose<T, F>(opt: Option<Result<T>>, f: F) -> Option<Result<T>>
+// where
+//     F: FnOnce() -> Result<Option<T>>,
+// {
+//     if let None = opt {
+//         f().transpose()
+//     } else {
+//         opt
+//     }
+// }
 
 // Create a post from som raw data.
 impl<'a, T: Authenticator> From<(RawKind<RawPostData>, &'a AuthenticatedClient<T>)>
