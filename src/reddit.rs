@@ -100,8 +100,18 @@ impl<T: Authenticator> Reddit<T> {
     /// # }
 
     pub fn subreddit(&self, name: &str) -> Subreddit<T> {
-        Subreddit::create(format!("{}r/{}", self.url, name).as_str(), &self.client)
+        Subreddit::create(name, &self.client)
     }
+
+    // /// Submit a text post.
+    // /// Equivalent to calling [`Subreddit::submit`], prefer using that if you already have a handle into the subreddit.
+    // pub fn submit(&self, subreddit: &str, title: &str, text: &str) -> Post<T> {
+    //     Subreddit::create(
+    //         format!("{}r/{}", self.url, subreddit).as_str(),
+    //         &self.client,
+    //     )
+    //     .submit(title, text)
+    // }
 }
 
 /// All errors that can occur when using Snew. The source error (e.g. from a separate library), if any, can be found by calling error.source().

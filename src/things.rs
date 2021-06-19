@@ -6,13 +6,14 @@ use self::raw::{
 };
 use crate::{
     auth::{AuthenticatedClient, Authenticator},
-    reddit::{Error, Result},
+    reddit::Result,
 };
 
 /// A handle to interact with a subreddit.
 /// See [`PostFeed`] for some gotchas when iterating over Posts.
 #[derive(Debug)]
 pub struct Subreddit<'a, T: Authenticator> {
+    pub name: String,
     pub url: String,
     client: &'a AuthenticatedClient<T>,
 }
@@ -20,9 +21,10 @@ pub struct Subreddit<'a, T: Authenticator> {
 impl<'a, T: Authenticator> Subreddit<'a, T> {
     /// Create a instance of a subreddit
     /// Use [`crate::reddit::Reddit::subreddit()`] instead, when possible.
-    pub fn create(url: &str, client: &'a AuthenticatedClient<T>) -> Self {
+    pub fn create(name: &str, client: &'a AuthenticatedClient<T>) -> Self {
         Self {
-            url: String::from(url),
+            name: String::from(name),
+            url: format!("{}r/{}", crate::reddit::URL, name),
             client,
         }
     }
@@ -44,6 +46,15 @@ impl<'a, T: Authenticator> Subreddit<'a, T> {
     pub fn top(&self) -> PostFeed<T> {
         self.posts_sorted("top")
     }
+
+    // /// Submit a text post.
+    // pub fn submit(&self, title: &str, text: &str) -> Post<T> {
+    //     self.client.get(
+    //         format!("{}/api/submit", crate::reddit::URL).as_str(),
+    //         Some(&[("sr", self.name)]),
+    //     );
+    //     todo!()
+    // }
 
     fn posts_sorted(&self, path: &str) -> PostFeed<T> {
         PostFeed {
@@ -80,6 +91,8 @@ pub struct Post<'a, T: Authenticator> {
 }
 
 impl<'a, T: Authenticator> Post<'a, T> {
+    /// Get the comments for this post.
+    /// Currently these are only the top level comments.
     pub fn comments(&self) -> CommentFeed<T> {
         CommentFeed {
             client: self.client,
@@ -114,31 +127,19 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
     type Item = Result<Post<'a, T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(post) = self.cached_posts.pop() {
-            Some(Ok(post))
-        } else {
-            let res = self.client.get(
-                self.url.as_str(),
-                Some(&[
-                    ("limit", self.limit.to_string()),
-                    ("after", self.after.clone()),
-                ]),
-            );
-            // Probably some cleaner way to do this
-            let listing = match res {
-                Ok(response) => match response.text() {
-                    Ok(text) => {
-                        match serde_json::from_str::<RawListing<RawKind<RawPostData>>>(
-                            text.as_str(),
-                        ) {
-                            Ok(raw) => raw,
-                            Err(err) => return Some(Err(Error::APIParseError(err))),
-                        }
-                    }
-                    Err(err) => return Some(Err(Error::RequestError(err))),
-                },
-                Err(err) => return Some(Err(err)),
-            };
+        or_else_transpose(self.cached_posts.pop().map(Ok), || {
+            let text = self
+                .client
+                .get(
+                    self.url.as_str(),
+                    Some(&[
+                        ("limit", self.limit.to_string()),
+                        ("after", self.after.clone()),
+                    ]),
+                )?
+                .text()?;
+
+            let listing: RawListing<RawKind<RawPostData>> = serde_json::from_str(&text)?;
 
             // Make sure the next HTTP request gets posts after the last one we fetched.
             if let Some(after) = listing.data.pagination.after {
@@ -157,10 +158,8 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
                     .map(|raw| (raw, client))
                     .map(From::from),
             );
-
-            let post = self.cached_posts.pop();
-            post.map(Ok)
-        }
+            Ok(self.cached_posts.pop())
+        })
     }
 }
 
@@ -183,37 +182,20 @@ impl<'a, T: Authenticator> Iterator for CommentFeed<'a, T> {
     type Item = Result<Comment>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(comment) = self.cached_comments.pop() {
-            Some(Ok(comment))
-        } else {
-            let res = self.client.get(self.url.as_str(), None::<&()>);
-            // Probably some cleaner way to do this
-            // Comments are a list of listings.
-            let listings = match res {
-                Ok(response) => match response.text() {
-                    Ok(text) => {
-                        match serde_json::from_str::<(Empty, RawListing<RawKind<RawCommentData>>)>(
-                            text.as_str(),
-                        ) {
-                            Ok(raw) => raw,
-                            Err(err) => return Some(Err(Error::APIParseError(err))),
-                        }
-                    }
-                    Err(err) => return Some(Err(Error::RequestError(err))),
-                },
-                Err(err) => return Some(Err(err)),
-            };
+        or_else_transpose(self.cached_comments.pop().map(Ok), || {
+            let text = self.client.get(self.url.as_str(), None::<&()>)?.text()?;
 
-            // The first listing returned by reddit is the post the comments belong to (smh..), the second listing are the comments, so we just ignore the first element of the tuple.
-            let (_, comments) = listings;
+            // The first listing returned by reddit is the post the comments belong to (smh..), the second listing are the comments.
+            // So we just toss away all the json from the first element of the tuple.
+            let listings: (Empty, RawListing<RawKind<RawCommentData>>) =
+                serde_json::from_str(text.as_str())?;
 
             // Add comments to the cached_commments array, converting from RawComment to Comment in the process
             self.cached_comments
-                .extend(comments.data.children.into_iter().rev().map(From::from));
+                .extend(listings.1.data.children.into_iter().rev().map(From::from));
 
-            let comment = self.cached_comments.pop();
-            comment.map(Ok)
-        }
+            Ok(self.cached_comments.pop())
+        })
     }
 }
 
@@ -225,6 +207,17 @@ pub struct Me {
     pub link_karma: i32,
     pub comment_karma: i32,
     pub verified: bool,
+}
+
+fn or_else_transpose<T, F>(opt: Option<Result<T>>, f: F) -> Option<Result<T>>
+where
+    F: FnOnce() -> Result<Option<T>>,
+{
+    if let None = opt {
+        f().transpose()
+    } else {
+        opt
+    }
 }
 
 // Create a post from som raw data.
