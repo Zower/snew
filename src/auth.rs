@@ -11,8 +11,12 @@ use serde::{Deserialize, Serialize};
 
 /// Behavior of something that can provide access to the Reddit API.
 pub trait Authenticator {
+    /// Refresh/fetch the token from the Reddit API.
     fn login(&mut self) -> Result<()>;
+    /// Provide a token to authenticate to the reddit API with.
+    /// If this is invalid(outdated) or None, [`login`] should refresh it.
     fn token(&self) -> Option<Token>;
+    /// This authenticator can make requests that pertain to a user, such as posting a comment etc.
     fn is_user(&self) -> bool;
 
     fn default_agent() -> String {
@@ -37,7 +41,7 @@ pub struct Token {
 
 /// Authenticated interaction with the Reddit API. Use [`crate::reddit::Reddit`] instead.
 /// This is shared by all current interactors with what reddit calls 'things', so they can make requests for more posts, comments, etc.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthenticatedClient<T: Authenticator> {
     pub client: RefCell<Client>,
     pub authenticator: RefCell<T>,

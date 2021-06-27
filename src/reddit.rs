@@ -31,7 +31,7 @@ pub const URL: &str = "https://oauth.reddit.com/";
 /// println!("{:?}", reddit.me().unwrap());
 /// ```
 /// See also [`Reddit::subreddit`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Reddit<T: Authenticator> {
     client: AuthenticatedClient<T>,
     url: String,

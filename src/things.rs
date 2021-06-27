@@ -215,7 +215,7 @@ pub trait Transpose<T> {
 
 impl<T> Transpose<T> for Option<Result<T>> {
     fn or_else_transpose<F: FnOnce() -> Result<Option<T>>>(self, f: F) -> Option<Result<T>> {
-        if let None = self {
+        if self.is_none() {
             f().transpose()
         } else {
             self
