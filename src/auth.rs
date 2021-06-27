@@ -154,14 +154,14 @@ impl<T: Authenticator> AuthenticatedClient<T> {
 }
 
 /// Client ID and Secret for the application
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClientInfo {
     pub client_id: String,
     pub client_secret: String,
 }
 
 /// Login credentials
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Credentials {
     client_info: ClientInfo,
     pub username: String,
@@ -184,7 +184,7 @@ impl Credentials {
 /// Authenticator for Script applications.
 /// This includes username and password, which means you are logged in, and can perform actions such as voting.
 ///See also reddit OAuth API docs.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScriptAuthenticator {
     creds: Credentials,
     token: Option<Token>,
@@ -256,7 +256,7 @@ impl Authenticator for ScriptAuthenticator {
 
 /// Anonymous authentication.
 /// You will still need a client ID and secret, but you will not be logged in as some user. You can browse reddit, but not e.g. vote.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ApplicationAuthenticator {
     client_info: ClientInfo,
     token: Option<Token>,
