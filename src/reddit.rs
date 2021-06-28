@@ -51,7 +51,13 @@ impl<T: Authenticator> Reddit<T> {
 
     /// Get information about the user, useful for debugging.
     pub fn me(&self) -> Result<Me> {
-        if self.client.authenticator.borrow().is_user() {
+        if self
+            .client
+            .authenticator
+            .lock()
+            .expect("Poisoned mutex, report bug at https://github.com/Zower/snew")
+            .is_user()
+        {
             Ok(serde_json::from_str(
                 &self
                     .client
@@ -135,8 +141,7 @@ pub enum Error {
     #[error("Invalid header value. Either your user agent is malformed (only ASCII 32-127 allowed), or Reddit is returning disallowed characters in the access token. \nCaused by:\t{0}")]
     InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
 
-    /// This error occurs if you attempt to make some request that requires you to be logged in (e.g. script authentication), such as making a post.
-    #[error("This action is only allowed when logged in, not with application authentication.")]
+    /// This error occurs if you attempt to make some request that requires you to be logged in (e.g. script authentication), but you are authenticated anonymously.
+    #[error("This action is only allowed when logged in, not with anonymous authentication.")]
     NotLoggedInError,
-    // KindParseError
 }

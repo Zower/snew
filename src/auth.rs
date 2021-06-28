@@ -1,5 +1,5 @@
 //! Authentication towards the API.
-use std::cell::{RefCell, RefMut};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::reddit::{Error, Result};
 
@@ -43,8 +43,8 @@ pub struct Token {
 /// This is shared by all current interactors with what reddit calls 'things', so they can make requests for more posts, comments, etc.
 #[derive(Debug, Clone)]
 pub struct AuthenticatedClient<T: Authenticator> {
-    pub client: RefCell<Client>,
-    pub authenticator: RefCell<T>,
+    pub(crate) client: Arc<Mutex<Client>>,
+    pub(crate) authenticator: Arc<Mutex<T>>,
     user_agent: String,
 }
 
@@ -55,8 +55,8 @@ impl<T: Authenticator> AuthenticatedClient<T> {
         if let Some(token) = authenticator.token() {
             let client = Self::make_client(user_agent, &token.access_token)?;
             Ok(Self {
-                authenticator: RefCell::new(authenticator),
-                client: RefCell::new(client),
+                authenticator: Arc::new(Mutex::new(authenticator)),
+                client: Arc::new(Mutex::new(client)),
                 user_agent: String::from(user_agent),
             })
         } else {
@@ -69,7 +69,10 @@ impl<T: Authenticator> AuthenticatedClient<T> {
     /// Errors if the status code was unexpected, the client cannot re-initialize or make the request, or if the authentication fails.
     pub fn get<Q: Serialize>(&self, url: &str, queries: Option<&Q>) -> Result<Response> {
         // Make one request
-        let mut client = self.client.borrow_mut();
+        let mut client = self
+            .client
+            .lock()
+            .expect("Poisoned mutex, report bug at https://github.com/Zower/snew");
 
         let response = self.make_request(&client, url, queries)?;
 
@@ -78,7 +81,10 @@ impl<T: Authenticator> AuthenticatedClient<T> {
             Ok(response)
         } else {
             // Refresh token
-            let mut authenticator = self.authenticator.borrow_mut();
+            let mut authenticator = self
+                .authenticator
+                .lock()
+                .expect("Poisoned mutex, report bug at https://github.com/Zower/snew");
             authenticator.login()?;
 
             if let Some(token) = authenticator.token() {
@@ -106,7 +112,7 @@ impl<T: Authenticator> AuthenticatedClient<T> {
     // Checks queries and makes the actual web request
     fn make_request<Q: Serialize>(
         &self,
-        client: &RefMut<Client>,
+        client: &MutexGuard<Client>,
         url: &str,
         queries: Option<&Q>,
     ) -> Result<Response> {
