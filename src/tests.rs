@@ -30,9 +30,14 @@ mod tests {
         );
         let reddit = Reddit::new(application_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
 
-        for post in reddit.subreddit("all").new().take(1) {
+        for post in reddit.subreddit("rust").hot().take(1) {
             let post = post?;
-            println!("{:?}", post.title);
+            println!("Post: {:?}", post.title);
+        }
+
+        for post in reddit.frontpage().best().take(1) {
+            let post = post?;
+            println!("Frontpage post: {}", post.title);
         }
 
         Ok(())

@@ -109,6 +109,15 @@ impl<T: Authenticator> Reddit<T> {
         Subreddit::create(name, &self.client)
     }
 
+    /// Posts from the frontpage.
+    pub fn frontpage(&self) -> Subreddit<T> {
+        Subreddit {
+            name: String::from("frontpage"),
+            url: self.url.clone(),
+            client: &self.client,
+        }
+    }
+
     // /// Submit a text post.
     // /// Equivalent to calling [`Subreddit::submit`], prefer using that if you already have a handle into the subreddit.
     // pub fn submit(&self, subreddit: &str, title: &str, text: &str) -> Post<T> {

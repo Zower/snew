@@ -15,7 +15,7 @@ use crate::{
 pub struct Subreddit<'a, T: Authenticator> {
     pub name: String,
     pub url: String,
-    client: &'a AuthenticatedClient<T>,
+    pub(crate) client: &'a AuthenticatedClient<T>,
 }
 
 impl<'a, T: Authenticator> Subreddit<'a, T> {
@@ -28,23 +28,32 @@ impl<'a, T: Authenticator> Subreddit<'a, T> {
             client,
         }
     }
+
     pub fn hot(&self) -> PostFeed<T> {
         self.posts_sorted("hot")
     }
+
     // new() is usually reserved for creating a instance of the struct
     // Inconsistent to put new_sorting, and much easier to use this way than to use x_sorting for all the functions
     #[allow(clippy::clippy::new_ret_no_self)]
     pub fn new(&self) -> PostFeed<T> {
         self.posts_sorted("new")
     }
+
     pub fn random(&self) -> PostFeed<T> {
         self.posts_sorted("random")
     }
+
     pub fn rising(&self) -> PostFeed<T> {
         self.posts_sorted("rising")
     }
+
     pub fn top(&self) -> PostFeed<T> {
         self.posts_sorted("top")
+    }
+
+    pub fn best(&self) -> PostFeed<T> {
+        self.posts_sorted("best")
     }
 
     // /// Submit a text post.
