@@ -9,13 +9,15 @@ mod tests {
 
     #[test]
     fn it_works() -> Result<()> {
+        let username = &env::var("REDDIT_USERNAME").unwrap();
+
         let script_auth = ScriptAuthenticator::new(Credentials::new(
             &env::var("REDDIT_CLIENT_ID").unwrap(),
             &env::var("REDDIT_CLIENT_SECRET").unwrap(),
             &env::var("REDDIT_USERNAME").unwrap(),
             &env::var("REDDIT_PASSWORD").unwrap(),
         ));
-        let reddit = Reddit::new(script_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
+        let reddit = Reddit::new(script_auth, &format!("Windows:snew:v0.1.0 (by /u/{})", username)).unwrap();
 
         println!("{:?}", reddit.me()?);
 
@@ -29,7 +31,7 @@ mod tests {
             &env::var("REDDIT_CLIENT_SECRET").unwrap(),
         );
 
-        let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
+        let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by anonymous)").unwrap();
 
         for post in reddit.subreddit("rust").hot().take(1) {
             let post = post?;
@@ -46,14 +48,20 @@ mod tests {
 
     #[test]
     fn comments() -> Result<()> {
+        let username = &env::var("REDDIT_USERNAME").unwrap();
+
         let script_auth = ScriptAuthenticator::new(Credentials::new(
             &env::var("REDDIT_CLIENT_ID").unwrap(),
             &env::var("REDDIT_CLIENT_SECRET").unwrap(),
-            &env::var("REDDIT_USERNAME").unwrap(),
+            username,
             &env::var("REDDIT_PASSWORD").unwrap(),
         ));
 
-        let reddit = Reddit::new(script_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
+        let reddit = Reddit::new(
+            script_auth,
+            &format!("Windows:snew:v0.1.0 (by /u/{})", username),
+        )
+        .unwrap();
 
         let hot = reddit.subreddit("globaloffensive").hot();
 
@@ -77,7 +85,7 @@ mod tests {
             &env::var("REDDIT_CLIENT_ID").unwrap(),
             &env::var("REDDIT_CLIENT_SECRET").unwrap(),
         );
-        let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
+        let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by anonymous)").unwrap();
 
         reddit.me().unwrap();
     }

@@ -11,7 +11,7 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 
 /// Behavior of something that can provide access to the Reddit API.
-pub trait Authenticator: std::fmt::Debug + Send {
+pub trait Authenticator: std::fmt::Debug + Send + Sync {
     /// Refresh/fetch the token from the Reddit API.
     fn login(&self, client: &Client) -> Result<()>;
     /// Provide a token to authenticate to the reddit API with.
