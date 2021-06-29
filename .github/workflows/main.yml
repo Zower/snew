@@ -17,3 +17,5 @@ jobs:
       run: cargo test
     - name: Format
       run: cargo fmt -- --check 
+    - name: Check
+      run: cargo check
