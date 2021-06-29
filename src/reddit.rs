@@ -42,7 +42,7 @@ pub struct Reddit {
 // The API calls.
 impl Reddit {
     /// Creates a new API connection, using the given authenticator.
-    pub fn new<T: Authenticator>(authenticator: T, user_agent: &str) -> Result<Self> {
+    pub fn new<T: Authenticator + 'static>(authenticator: T, user_agent: &str) -> Result<Self> {
         let client = AuthenticatedClient::new(authenticator, user_agent)?;
 
         Ok(Self {

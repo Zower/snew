@@ -11,7 +11,7 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 
 /// Behavior of something that can provide access to the Reddit API.
-pub trait Authenticator: std::fmt::Debug + 'static {
+pub trait Authenticator: std::fmt::Debug {
     /// Refresh/fetch the token from the Reddit API.
     fn login(&self, client: &Client) -> Result<()>;
     /// Provide a token to authenticate to the reddit API with.
@@ -68,7 +68,7 @@ pub struct AuthenticatedClient {
 }
 
 impl AuthenticatedClient {
-    pub fn new<T: Authenticator>(authenticator: T, user_agent: &str) -> Result<Self> {
+    pub fn new<T: Authenticator + 'static>(authenticator: T, user_agent: &str) -> Result<Self> {
         let client = Self::make_client(user_agent)?;
 
         authenticator.login(&client)?;
