@@ -20,7 +20,7 @@ pub struct Subreddit<'a, T: Authenticator> {
 
 impl<'a, T: Authenticator> Subreddit<'a, T> {
     /// Create a instance of a subreddit
-    /// Use [`crate::reddit::Reddit::subreddit()`] instead, when possible.
+    /// Use [`crate::reddit::Reddit::subreddit()`] instead.
     pub fn create(name: &str, client: &'a AuthenticatedClient<T>) -> Self {
         Self {
             name: String::from(name),
@@ -29,30 +29,30 @@ impl<'a, T: Authenticator> Subreddit<'a, T> {
         }
     }
 
-    pub fn hot(&self) -> PostFeed<T> {
+    pub fn hot(&self) -> PostFeed<'a, T> {
         self.posts_sorted("hot")
     }
 
     // new() is usually reserved for creating a instance of the struct
     // Inconsistent to put new_sorting, and much easier to use this way than to use x_sorting for all the functions
     #[allow(clippy::clippy::new_ret_no_self)]
-    pub fn new(&self) -> PostFeed<T> {
+    pub fn new(&self) -> PostFeed<'a, T> {
         self.posts_sorted("new")
     }
 
-    pub fn random(&self) -> PostFeed<T> {
+    pub fn random(&self) -> PostFeed<'a, T> {
         self.posts_sorted("random")
     }
 
-    pub fn rising(&self) -> PostFeed<T> {
+    pub fn rising(&self) -> PostFeed<'a, T> {
         self.posts_sorted("rising")
     }
 
-    pub fn top(&self) -> PostFeed<T> {
+    pub fn top(&self) -> PostFeed<'a, T> {
         self.posts_sorted("top")
     }
 
-    pub fn best(&self) -> PostFeed<T> {
+    pub fn best(&self) -> PostFeed<'a, T> {
         self.posts_sorted("best")
     }
 
@@ -65,7 +65,7 @@ impl<'a, T: Authenticator> Subreddit<'a, T> {
     //     todo!()
     // }
 
-    fn posts_sorted(&self, path: &str) -> PostFeed<T> {
+    fn posts_sorted(&self, path: &str) -> PostFeed<'a, T> {
         PostFeed {
             limit: 100,
             url: format!("{}/{}", self.url, path),
@@ -102,7 +102,7 @@ pub struct Post<'a, T: Authenticator> {
 impl<'a, T: Authenticator> Post<'a, T> {
     /// Get the comments for this post.
     /// Currently these are only the top level comments.
-    pub fn comments(&self) -> CommentFeed<T> {
+    pub fn comments(&self) -> CommentFeed<'a, T> {
         CommentFeed {
             client: self.client,
             url: format!(

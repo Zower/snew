@@ -54,11 +54,12 @@ mod tests {
 
         let reddit = Reddit::new(script_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
 
-        let global = reddit.subreddit("globaloffensive");
+        let hot = reddit.subreddit("globaloffensive").hot();
 
-        for post in global.hot().take(3) {
+        for post in hot.take(3) {
             let post = post?;
             println!("Post: {}", post.title);
+
             for comment in post.comments().take(1) {
                 let comment = comment?;
                 println!("By: {}, {}", comment.author, comment.body);
