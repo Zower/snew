@@ -5,7 +5,7 @@ use crate::reddit::{Error, Result};
 
 use reqwest::{
     blocking::{Client, Response},
-    header::AUTHORIZATION,
+    header::{HeaderValue, AUTHORIZATION},
     StatusCode,
 };
 use serde::{Deserialize, Serialize};
@@ -119,16 +119,21 @@ impl AuthenticatedClient {
         url: &str,
         queries: Option<&Q>,
     ) -> Result<Response> {
-        let bearer = format!("bearer {}", token.access_token);
+        let mut authorization = HeaderValue::from_str(&format!("bearer {}", token.access_token))?;
+
+        authorization.set_sensitive(true);
 
         if let Some(queries) = queries {
             Ok(client
                 .get(url)
-                .header(AUTHORIZATION, bearer)
+                .header(AUTHORIZATION, authorization)
                 .query(queries)
                 .send()?)
         } else {
-            Ok(client.get(url).header(AUTHORIZATION, bearer).send()?)
+            Ok(client
+                .get(url)
+                .header(AUTHORIZATION, authorization)
+                .send()?)
         }
     }
 
