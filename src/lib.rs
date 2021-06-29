@@ -48,6 +48,12 @@
 //     missing_docs
 )]
 #![deny(unsafe_code)]
+
+#[cfg(feature = "sync")]
+type RefCounted<T> = std::rc::Arc<T>;
+#[cfg(not(feature = "sync"))]
+type RefCounted<T> = std::rc::Rc<T>;
+
 pub mod auth;
 pub mod reddit;
 mod tests;

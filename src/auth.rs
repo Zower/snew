@@ -1,33 +1,24 @@
 //! Authentication towards the API.
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::RwLock;
 
 use crate::reddit::{Error, Result};
 
 use reqwest::{
     blocking::{Client, Response},
-    header, StatusCode,
+    header::{HeaderValue, AUTHORIZATION},
+    StatusCode,
 };
 use serde::{Deserialize, Serialize};
 
 /// Behavior of something that can provide access to the Reddit API.
-pub trait Authenticator {
+pub trait Authenticator: std::fmt::Debug + 'static {
     /// Refresh/fetch the token from the Reddit API.
-    fn login(&mut self) -> Result<()>;
+    fn login(&self, client: &Client) -> Result<()>;
     /// Provide a token to authenticate to the reddit API with.
     /// If this is invalid(outdated) or None, [`login`] should refresh it.
     fn token(&self) -> Option<Token>;
     /// This authenticator can make requests that pertain to a user, such as posting a comment etc.
     fn is_user(&self) -> bool;
-
-    fn default_agent() -> String {
-        format!(
-            "{}:{}:{}:{}",
-            "desktop",
-            "snew",
-            env!("CARGO_PKG_VERSION"),
-            "(by snewAuthenticator)"
-        )
-    }
 }
 
 /// An access token.
@@ -41,85 +32,74 @@ pub struct Token {
 
 /// Authenticated interaction with the Reddit API. Use [`crate::reddit::Reddit`] instead.
 /// This is shared by all current interactors with what reddit calls 'things', so they can make requests for more posts, comments, etc.
-#[derive(Debug, Clone)]
-pub struct AuthenticatedClient<T: Authenticator> {
-    pub(crate) client: Arc<Mutex<Client>>,
-    pub(crate) authenticator: Arc<Mutex<T>>,
-    user_agent: String,
+#[derive(Debug)]
+pub struct AuthenticatedClient {
+    client: Client,
+    pub authenticator: Box<dyn Authenticator>,
 }
 
-impl<T: Authenticator> AuthenticatedClient<T> {
-    pub fn new(mut authenticator: T, user_agent: &str) -> Result<Self> {
-        authenticator.login()?;
-
-        if let Some(token) = authenticator.token() {
-            let client = Self::make_client(user_agent, &token.access_token)?;
-            Ok(Self {
-                authenticator: Arc::new(Mutex::new(authenticator)),
-                client: Arc::new(Mutex::new(client)),
-                user_agent: String::from(user_agent),
-            })
-        } else {
-            // Pretty sure this can never happen, but better safe than sorry? :D
-            Err(Error::AuthenticationError(String::from("Token was not set after logging in, but no error was returned. Report bug at https://github.com/Zower/snew")))
-        }
+impl AuthenticatedClient {
+    pub fn new<T: Authenticator>(authenticator: T, user_agent: &str) -> Result<Self> {
+        Ok(Self {
+            authenticator: Box::new(authenticator) as Box<dyn Authenticator>,
+            client: Self::make_client(user_agent)?,
+        })
     }
 
     /// Make a get request to `url`
     /// Errors if the status code was unexpected, the client cannot re-initialize or make the request, or if the authentication fails.
     pub fn get<Q: Serialize>(&self, url: &str, queries: Option<&Q>) -> Result<Response> {
         // Make one request
-        let mut client = self
-            .client
-            .lock()
-            .expect("Poisoned mutex, report bug at https://github.com/Zower/snew");
+        if let Some(ref token) = self.authenticator.token() {
+            let response = self.make_request(&self.client, token, url, queries)?;
 
-        let response = self.make_request(&client, url, queries)?;
-
-        // Check if the request was successful
-        if self.check_auth(&response)? {
-            Ok(response)
-        } else {
-            // Refresh token
-            let mut authenticator = self
-                .authenticator
-                .lock()
-                .expect("Poisoned mutex, report bug at https://github.com/Zower/snew");
-            authenticator.login()?;
-
-            if let Some(token) = authenticator.token() {
-                // Create a new client with correct token
-                *client = Self::make_client(&self.user_agent, &token.access_token)?;
-            } else {
-                // Pretty sure this can never happen, but better safe than sorry? :D
-                return Err(Error::AuthenticationError(String::from("Token was not set after logging in, but no error was returned. Report bug at https://github.com/Zower/snew")));
+            if self.check_auth(&response)? {
+                return Ok(response);
             }
+        }
 
-            let response = self.make_request(&client, url, queries)?;
+        // Refresh token
+        self.authenticator.login(&self.client)?;
+
+        if let Some(ref token) = self.authenticator.token() {
+            let response = self.make_request(&self.client, token, url, queries)?;
 
             if response.status() == StatusCode::OK {
                 Ok(response)
-            }
-            // Still not authenticated correctly
-            else {
+            } else {
+                // Still not authenticated correctly
                 Err(Error::AuthenticationError(String::from(
                     "Failed to authenticate, even after requesting new token. Check credentials.",
                 )))
             }
+        } else {
+            // Pretty sure this can never happen, but better safe than sorry? :D
+            return Err(Error::AuthenticationError(String::from("Token was not set after logging in, but no error was returned. Report bug at https://github.com/Zower/snew")));
         }
     }
 
     // Checks queries and makes the actual web request
     fn make_request<Q: Serialize>(
         &self,
-        client: &MutexGuard<Client>,
+        client: &Client,
+        token: &Token,
         url: &str,
         queries: Option<&Q>,
     ) -> Result<Response> {
+        let mut authorization = HeaderValue::from_str(&format!("bearer {}", token.access_token))?;
+        authorization.set_sensitive(true);
+
         if let Some(queries) = queries {
-            Ok(client.get(url).query(queries).send()?)
+            Ok(client
+                .get(url)
+                .header(AUTHORIZATION, authorization)
+                .query(queries)
+                .send()?)
         } else {
-            Ok(client.get(url).send()?)
+            Ok(client
+                .get(url)
+                .header(AUTHORIZATION, authorization)
+                .send()?)
         }
     }
 
@@ -140,20 +120,8 @@ impl<T: Authenticator> AuthenticatedClient<T> {
     }
 
     // Make a reqwest client with user_agent and bearer token set as default headers.
-    fn make_client(user_agent: &str, access_token: &str) -> Result<Client> {
-        let mut headers = header::HeaderMap::new();
-
-        let mut authorization =
-            header::HeaderValue::from_str(&format!("bearer {}", &access_token))?;
-
-        authorization.set_sensitive(true);
-
-        headers.insert(header::AUTHORIZATION, authorization);
-
-        Ok(Client::builder()
-            .user_agent(user_agent)
-            .default_headers(headers)
-            .build()?)
+    fn make_client(user_agent: &str) -> Result<Client> {
+        Ok(Client::builder().user_agent(user_agent).build()?)
     }
 }
 
@@ -187,25 +155,24 @@ impl Credentials {
 
 /// Authenticator for Script applications.
 /// This includes username and password, which means you are logged in, and can perform actions such as voting.
-///See also reddit OAuth API docs.
-#[derive(Debug, Clone)]
+/// See also reddit OAuth API docs.
+#[derive(Debug)]
 pub struct ScriptAuthenticator {
     creds: Credentials,
-    token: Option<Token>,
+    token: RwLock<Option<Token>>,
 }
 
 impl ScriptAuthenticator {
     pub fn new(creds: Credentials) -> Self {
-        Self { creds, token: None }
+        Self {
+            creds,
+            token: RwLock::new(None),
+        }
     }
 }
 
 impl Authenticator for ScriptAuthenticator {
-    fn login(&mut self) -> Result<()> {
-        let client = Client::builder()
-            .user_agent(ScriptAuthenticator::default_agent())
-            .build()?;
-
+    fn login(&self, client: &Client) -> Result<()> {
         // Make the request for the access token.
         let response = client
             .post("https://www.reddit.com/api/v1/access_token")
@@ -226,7 +193,11 @@ impl Authenticator for ScriptAuthenticator {
 
         // Parse the response as JSON.
         if let Ok(token) = serde_json::from_str::<Token>(slice) {
-            self.token = Some(token);
+            *self
+                .token
+                .write()
+                .expect("Poisoned mutex, report bug at https://github.com/Zower/snew") =
+                Some(token);
         }
         // Various errors that can occur
         else if let Ok(error) = serde_json::from_str::<OkButError>(slice) {
@@ -250,7 +221,10 @@ impl Authenticator for ScriptAuthenticator {
     }
 
     fn token(&self) -> Option<Token> {
-        self.token.clone()
+        self.token
+            .read()
+            .expect("Poisoned mutex, report bug at https://github.com/Zower/snew")
+            .clone()
     }
 
     fn is_user(&self) -> bool {
@@ -260,10 +234,10 @@ impl Authenticator for ScriptAuthenticator {
 
 /// Anonymous authentication.
 /// You will still need a client ID and secret, but you will not be logged in as some user. You can browse reddit, but not e.g. vote.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ApplicationAuthenticator {
     client_info: ClientInfo,
-    token: Option<Token>,
+    token: RwLock<Option<Token>>,
 }
 
 impl ApplicationAuthenticator {
@@ -273,17 +247,13 @@ impl ApplicationAuthenticator {
                 client_id: String::from(client_id),
                 client_secret: String::from(client_secret),
             },
-            token: None,
+            token: RwLock::new(None),
         }
     }
 }
 
 impl Authenticator for ApplicationAuthenticator {
-    fn login(&mut self) -> Result<()> {
-        let client = Client::builder()
-            .user_agent(ApplicationAuthenticator::default_agent())
-            .build()?;
-
+    fn login(&self, client: &Client) -> Result<()> {
         // Make the request for the access token.
         let response = client
             .post("https://www.reddit.com/api/v1/access_token")
@@ -300,7 +270,11 @@ impl Authenticator for ApplicationAuthenticator {
 
         // Parse the response as JSON.
         if let Ok(token) = serde_json::from_str::<Token>(slice) {
-            self.token = Some(token);
+            *self
+                .token
+                .write()
+                .expect("Poisoned mutex, report bug at https://github.com/Zower/snew") =
+                Some(token);
         }
         // Various errors that can occur
         else if let Ok(error) = serde_json::from_str::<OkButError>(slice) {
@@ -323,7 +297,10 @@ impl Authenticator for ApplicationAuthenticator {
         Ok(())
     }
     fn token(&self) -> Option<Token> {
-        self.token.clone()
+        self.token
+            .read()
+            .expect("Poisoned mutex, report bug at https://github.com/Zower/snew")
+            .clone()
     }
 
     fn is_user(&self) -> bool {
