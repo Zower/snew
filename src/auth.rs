@@ -143,14 +143,12 @@ impl<T: Authenticator> AuthenticatedClient<T> {
     fn make_client(user_agent: &str, access_token: &str) -> Result<Client> {
         let mut headers = header::HeaderMap::new();
 
-        headers.insert(
-            header::AUTHORIZATION,
-            header::HeaderValue::from_str(&format!("bearer {}", &access_token))?,
-        );
-        headers.insert(
-            header::USER_AGENT,
-            header::HeaderValue::from_str(user_agent)?,
-        );
+        let mut authorization =
+            header::HeaderValue::from_str(&format!("bearer {}", &access_token))?;
+
+        authorization.set_sensitive(true);
+
+        headers.insert(header::AUTHORIZATION, authorization);
 
         Ok(Client::builder()
             .user_agent(user_agent)
