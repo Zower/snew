@@ -4,24 +4,23 @@ use serde::Deserialize;
 use self::raw::{
     comment::RawCommentData, generic_kind::RawKind, listing::RawListing, post::RawPostData,
 };
-use crate::{
-    auth::{AuthenticatedClient, Authenticator},
-    reddit::Result,
-};
+use crate::{auth::AuthenticatedClient, reddit::Result};
+
+use std::sync::Arc;
 
 /// A handle to interact with a subreddit.
 /// See [`PostFeed`] for some gotchas when iterating over Posts.
 #[derive(Debug)]
-pub struct Subreddit<'a, T: Authenticator> {
+pub struct Subreddit {
     pub name: String,
     pub url: String,
-    pub(crate) client: &'a AuthenticatedClient<T>,
+    pub(crate) client: Arc<AuthenticatedClient>,
 }
 
-impl<'a, T: Authenticator> Subreddit<'a, T> {
+impl Subreddit {
     /// Create a instance of a subreddit
     /// Use [`crate::reddit::Reddit::subreddit()`] instead.
-    pub fn create(name: &str, client: &'a AuthenticatedClient<T>) -> Self {
+    pub fn create(name: &str, client: Arc<AuthenticatedClient>) -> Self {
         Self {
             name: String::from(name),
             url: format!("{}r/{}", crate::reddit::URL, name),
@@ -29,30 +28,30 @@ impl<'a, T: Authenticator> Subreddit<'a, T> {
         }
     }
 
-    pub fn hot(&self) -> PostFeed<'a, T> {
+    pub fn hot(&self) -> PostFeed {
         self.posts_sorted("hot")
     }
 
     // new() is usually reserved for creating a instance of the struct
     // Inconsistent to put new_sorting, and much easier to use this way than to use x_sorting for all the functions
     #[allow(clippy::clippy::new_ret_no_self)]
-    pub fn new(&self) -> PostFeed<'a, T> {
+    pub fn new(&self) -> PostFeed {
         self.posts_sorted("new")
     }
 
-    pub fn random(&self) -> PostFeed<'a, T> {
+    pub fn random(&self) -> PostFeed {
         self.posts_sorted("random")
     }
 
-    pub fn rising(&self) -> PostFeed<'a, T> {
+    pub fn rising(&self) -> PostFeed {
         self.posts_sorted("rising")
     }
 
-    pub fn top(&self) -> PostFeed<'a, T> {
+    pub fn top(&self) -> PostFeed {
         self.posts_sorted("top")
     }
 
-    pub fn best(&self) -> PostFeed<'a, T> {
+    pub fn best(&self) -> PostFeed {
         self.posts_sorted("best")
     }
 
@@ -65,12 +64,12 @@ impl<'a, T: Authenticator> Subreddit<'a, T> {
     //     todo!()
     // }
 
-    fn posts_sorted(&self, path: &str) -> PostFeed<'a, T> {
+    fn posts_sorted(&self, path: &str) -> PostFeed {
         PostFeed {
             limit: 100,
             url: format!("{}/{}", self.url, path),
             cached_posts: Vec::new(),
-            client: self.client,
+            client: self.client.clone(),
             after: String::from(""),
         }
     }
@@ -78,8 +77,8 @@ impl<'a, T: Authenticator> Subreddit<'a, T> {
 
 /// A post.
 #[derive(Debug, Clone)]
-pub struct Post<'a, T: Authenticator> {
-    client: &'a AuthenticatedClient<T>,
+pub struct Post {
+    client: Arc<AuthenticatedClient>,
     pub title: String,
     /// Upvotes.
     pub ups: i32,
@@ -99,12 +98,12 @@ pub struct Post<'a, T: Authenticator> {
     pub kind: String,
 }
 
-impl<'a, T: Authenticator> Post<'a, T> {
+impl Post {
     /// Get the comments for this post.
     /// Currently these are only the top level comments.
-    pub fn comments(&self) -> CommentFeed<'a, T> {
+    pub fn comments(&self) -> CommentFeed {
         CommentFeed {
-            client: self.client,
+            client: self.client.clone(),
             url: format!(
                 "{}r/{}/comments/{}",
                 crate::reddit::URL,
@@ -119,7 +118,7 @@ impl<'a, T: Authenticator> Post<'a, T> {
 /// Represents interacting with a set of posts, meant to be iterated over. As long as there are posts to iterate over, this iterator will continue. You may wish to take() some elements.
 /// The iterator returns a Result<Post, Error>. The errors are either from the HTTP request or the JSON parsing.
 #[derive(Debug)]
-pub struct PostFeed<'a, T: Authenticator> {
+pub struct PostFeed {
     /// The amount of posts to request from the Reddit API. This does not mean you can only iterate over this many posts.
     /// The Iterator will simply make more requests if you iterate over more than this limit.
     /// You should set this to a specific number if you know that you will be making some exact number of requests < 100, so
@@ -127,13 +126,13 @@ pub struct PostFeed<'a, T: Authenticator> {
     /// which is 100, the max Reddit allows.
     pub limit: i32,
     url: String,
-    cached_posts: Vec<Post<'a, T>>,
-    client: &'a AuthenticatedClient<T>,
+    cached_posts: Vec<Post>,
+    client: Arc<AuthenticatedClient>,
     after: String,
 }
 
-impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
-    type Item = Result<Post<'a, T>>;
+impl Iterator for PostFeed {
+    type Item = Result<Post>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.cached_posts.pop().map(Ok).or_else_transpose(|| {
@@ -155,7 +154,7 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
                 self.after = after;
             }
 
-            let client = self.client;
+            let client = &self.client;
 
             // Add posts to the cached_posts array, converting from RawPost to Post in the process
             self.cached_posts.extend(
@@ -164,7 +163,7 @@ impl<'a, T: Authenticator> Iterator for PostFeed<'a, T> {
                     .children
                     .into_iter()
                     .rev()
-                    .map(|raw| (raw, client))
+                    .map(|raw| (raw, client.clone()))
                     .map(From::from),
             );
             Ok(self.cached_posts.pop())
@@ -182,12 +181,12 @@ pub struct Comment {
 
 /// A set of comments, meant to be iterated over.
 #[derive(Debug)]
-pub struct CommentFeed<'a, T: Authenticator> {
+pub struct CommentFeed {
     url: String,
-    client: &'a AuthenticatedClient<T>,
+    client: Arc<AuthenticatedClient>,
     cached_comments: Vec<Comment>,
 }
-impl<'a, T: Authenticator> Iterator for CommentFeed<'a, T> {
+impl Iterator for CommentFeed {
     type Item = Result<Comment>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -244,10 +243,8 @@ impl<T> Transpose<T> for Option<Result<T>> {
 // }
 
 // Create a post from som raw data.
-impl<'a, T: Authenticator> From<(RawKind<RawPostData>, &'a AuthenticatedClient<T>)>
-    for Post<'a, T>
-{
-    fn from(raw: (RawKind<RawPostData>, &'a AuthenticatedClient<T>)) -> Self {
+impl From<(RawKind<RawPostData>, Arc<AuthenticatedClient>)> for Post {
+    fn from(raw: (RawKind<RawPostData>, Arc<AuthenticatedClient>)) -> Self {
         let (raw, client) = raw;
         Self {
             client,

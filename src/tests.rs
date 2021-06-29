@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::{
-        auth::{ApplicationAuthenticator, Credentials, ScriptAuthenticator},
+        auth::{AnonymousAuthenticator, Credentials, ScriptAuthenticator},
         reddit::{Reddit, Result},
     };
 
@@ -24,11 +24,12 @@ mod tests {
 
     #[test]
     fn anonymous() -> Result<()> {
-        let application_auth = ApplicationAuthenticator::new(
+        let anon_auth = AnonymousAuthenticator::new(
             &env::var("REDDIT_CLIENT_ID").unwrap(),
             &env::var("REDDIT_CLIENT_SECRET").unwrap(),
         );
-        let reddit = Reddit::new(application_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
+
+        let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
 
         for post in reddit.subreddit("rust").hot().take(1) {
             let post = post?;
@@ -72,11 +73,11 @@ mod tests {
     #[test]
     #[should_panic]
     fn unauthorized_anonoymous() {
-        let application_auth = ApplicationAuthenticator::new(
+        let anon_auth = AnonymousAuthenticator::new(
             &env::var("REDDIT_CLIENT_ID").unwrap(),
             &env::var("REDDIT_CLIENT_SECRET").unwrap(),
         );
-        let reddit = Reddit::new(application_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
+        let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by /u/zower98)").unwrap();
 
         reddit.me().unwrap();
     }
@@ -95,6 +96,8 @@ mod tests {
             script_auth,
             "<Operating system>:snew:v0.1.0 (by /u/<reddit username>)",
         );
+
+        println!("{:?}", reddit);
 
         reddit.unwrap();
     }

@@ -2,6 +2,8 @@
 use crate::auth::{AuthenticatedClient, Authenticator};
 use crate::things::*;
 
+use std::sync::Arc;
+
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -31,33 +33,27 @@ pub const URL: &str = "https://oauth.reddit.com/";
 /// println!("{:?}", reddit.me().unwrap());
 /// ```
 /// See also [`Reddit::subreddit`].
-#[derive(Debug, Clone)]
-pub struct Reddit<T: Authenticator> {
-    client: AuthenticatedClient<T>,
+#[derive(Debug)]
+pub struct Reddit {
+    client: Arc<AuthenticatedClient>,
     url: String,
 }
 
 // The API calls.
-impl<T: Authenticator> Reddit<T> {
+impl Reddit {
     /// Creates a new API connection, using the given authenticator.
-    pub fn new(authenticator: T, user_agent: &str) -> Result<Self> {
+    pub fn new<T: Authenticator>(authenticator: T, user_agent: &str) -> Result<Self> {
         let client = AuthenticatedClient::new(authenticator, user_agent)?;
 
         Ok(Self {
-            client,
+            client: Arc::new(client),
             url: String::from(URL),
         })
     }
 
     /// Get information about the user, useful for debugging.
     pub fn me(&self) -> Result<Me> {
-        if self
-            .client
-            .authenticator
-            .lock()
-            .expect("Poisoned mutex, report bug at https://github.com/Zower/snew")
-            .is_user()
-        {
+        if self.client.authenticator.is_user() {
             Ok(serde_json::from_str(
                 &self
                     .client
@@ -105,16 +101,16 @@ impl<T: Authenticator> Reddit<T> {
     /// # Ok(())
     /// # }
 
-    pub fn subreddit(&self, name: &str) -> Subreddit<T> {
-        Subreddit::create(name, &self.client)
+    pub fn subreddit(&self, name: &str) -> Subreddit {
+        Subreddit::create(name, self.client.clone())
     }
 
     /// Posts from the frontpage.
-    pub fn frontpage(&self) -> Subreddit<T> {
+    pub fn frontpage(&self) -> Subreddit {
         Subreddit {
             name: String::from("frontpage"),
             url: self.url.clone(),
-            client: &self.client,
+            client: self.client.clone(),
         }
     }
 

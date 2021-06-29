@@ -22,11 +22,11 @@
 //! // You cant do this without being logged in
 //! println!("{:?}", reddit.me().unwrap());
 //! ```
-//! # Application authentication (not logged in)
+//! # Anonymous authentication (not logged in)
 //! ```no_run
-//! use snew::{reddit::Reddit, auth::{ApplicationAuthenticator, Credentials}};
+//! use snew::{reddit::Reddit, auth::{AnonymousAuthenticator, Credentials}};
 //!
-//! let app_auth = ApplicationAuthenticator::new(
+//! let app_auth = AnonymousAuthenticator::new(
 //!     "client_id",
 //!     "client_secret",
 //! );
