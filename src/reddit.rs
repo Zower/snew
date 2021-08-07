@@ -106,6 +106,7 @@ impl Reddit {
     }
 
     /// Posts from the frontpage.
+    /// The Reddit API takes approximately 1.5-2x longer to fetch these posts than regular subreddit posts.
     pub fn frontpage(&self) -> Subreddit {
         Subreddit {
             name: String::from("frontpage"),

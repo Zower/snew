@@ -166,6 +166,7 @@ impl Iterator for PostFeed {
                     .map(|raw| (raw, client.clone()))
                     .map(From::from),
             );
+
             Ok(self.cached_posts.pop())
         })
     }
