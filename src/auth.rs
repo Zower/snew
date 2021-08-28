@@ -2,14 +2,13 @@
 
 use crate::reddit::{Error, Result};
 
+use self::authenticator::Authenticator;
 use reqwest::{
     blocking::{Client, Response},
     header::{HeaderValue, AUTHORIZATION},
     StatusCode,
 };
 use serde::{Deserialize, Serialize};
-use self::authenticator::Authenticator;
-
 
 /// An access token.
 #[derive(Debug, Clone, Deserialize)]
@@ -149,9 +148,12 @@ impl Credentials {
 }
 
 pub mod authenticator {
+    use crate::reddit::{Error, Result};
+    use reqwest::{
+        blocking::{Client, Response},
+        StatusCode,
+    };
     use std::sync::RwLock;
-    use reqwest::{StatusCode, blocking::{Client, Response}};
-    use crate::reddit::{Result, Error};
 
     use super::{ClientInfo, Credentials, Token};
     use serde::Deserialize;
@@ -308,4 +310,3 @@ pub mod authenticator {
         error: String,
     }
 }
-

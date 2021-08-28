@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests {
     use crate::{
-        auth::{authenticator::{AnonymousAuthenticator, ScriptAuthenticator}, Credentials, },
+        auth::{
+            authenticator::{AnonymousAuthenticator, ScriptAuthenticator},
+            Credentials,
+        },
         reddit::{Reddit, Result},
     };
 

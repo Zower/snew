@@ -6,7 +6,7 @@
 //!
 //! # Script authentication (logged in)
 //! ```no_run
-//! use snew::{reddit::Reddit, auth::{ScriptAuthenticator, Credentials}};
+//! use snew::{reddit::Reddit, auth::{authenticator::ScriptAuthenticator, Credentials}};
 //!
 //! let script_auth = ScriptAuthenticator::new(Credentials::new(
 //!     "client_id",
@@ -24,7 +24,7 @@
 //! ```
 //! # Anonymous authentication (not logged in)
 //! ```no_run
-//! use snew::{reddit::Reddit, auth::{AnonymousAuthenticator, Credentials}};
+//! use snew::{reddit::Reddit, auth::{authenticator::AnonymousAuthenticator, Credentials}};
 //!
 //! let app_auth = AnonymousAuthenticator::new(
 //!     "client_id",
