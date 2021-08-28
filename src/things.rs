@@ -23,7 +23,7 @@ impl Subreddit {
     pub fn create(name: &str, client: Arc<AuthenticatedClient>) -> Self {
         Self {
             name: String::from(name),
-            url: format!("{}r/{}", crate::reddit::URL, name),
+            url: format!("{}/r/{}", crate::reddit::URL, name),
             client,
         }
     }
@@ -105,7 +105,7 @@ impl Post {
         CommentFeed {
             client: self.client.clone(),
             url: format!(
-                "{}r/{}/comments/{}",
+                "{}/r/{}/comments/{}",
                 crate::reddit::URL,
                 self.subreddit,
                 self.id

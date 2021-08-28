@@ -8,7 +8,8 @@ use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub const URL: &str = "https://oauth.reddit.com/";
+pub const URL: &str = "https://oauth.reddit.com";
+
 /// Communicate with the Reddit API.
 /// # Creating a script application
 /// Go to [the reddit OAuth guide](https://github.com/reddit-archive/reddit/wiki/OAuth2-Quick-Start-Example#first-steps). Follow the instructions under "First Steps".
@@ -57,7 +58,7 @@ impl Reddit {
             Ok(serde_json::from_str(
                 &self
                     .client
-                    .get(&format!("{}{}", self.url, "api/v1/me"), None::<&()>)?
+                    .get(&format!("{}{}", self.url, "/api/v1/me"), None::<&()>)?
                     .text()?,
             )?)
         } else {
