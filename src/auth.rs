@@ -1,5 +1,4 @@
 //! Authentication towards the API.
-use std::sync::RwLock;
 
 use crate::reddit::{Error, Result};
 
@@ -9,46 +8,8 @@ use reqwest::{
     StatusCode,
 };
 use serde::{Deserialize, Serialize};
+use self::authenticator::Authenticator;
 
-/// Behavior of something that can provide access to the Reddit API.
-pub trait Authenticator: std::fmt::Debug + Send + Sync {
-    /// Refresh/fetch the token from the Reddit API.
-    fn login(&self, client: &Client) -> Result<()>;
-    /// Provide a token to authenticate to the reddit API with.
-    /// If this is invalid(outdated) or None, [`login`] should refresh it.
-    fn token(&self) -> Option<Token>;
-    /// This authenticator can make requests that pertain to a user, such as posting a comment etc.
-    fn is_user(&self) -> bool;
-
-    /// Convenience
-    fn parse_response(&self, response: Response) -> Result<Token> {
-        let status = response.status();
-        let slice = &response.text()?;
-
-        // Parse the response as JSON.
-        if let Ok(token) = serde_json::from_str::<Token>(slice) {
-            Ok(token)
-        }
-        // Various errors that can occur
-        else if let Ok(error) = serde_json::from_str::<OkButError>(slice) {
-            Err(Error::AuthenticationError(format!(
-                "{}, Reddit returned: {}",
-                "Username or password are most likely wrong", error.error
-            )))
-        } else if status == StatusCode::UNAUTHORIZED {
-            Err(Error::AuthenticationError(String::from(
-                "Client ID or Secret are wrong. Reddit returned 401 Unauthorized",
-            )))
-        }
-        // Unknown what went wrong
-        else {
-            return Err(Error::AuthenticationError(format!(
-                "Unexpected error occured, text: {}, code: {}",
-                slice, &status
-            )));
-        }
-    }
-}
 
 /// An access token.
 #[derive(Debug, Clone, Deserialize)]
@@ -187,114 +148,164 @@ impl Credentials {
     }
 }
 
-/// Authenticator for Script applications.
-/// This includes username and password, which means you are logged in, and can perform actions such as voting.
-/// See also reddit OAuth API docs.
-#[derive(Debug)]
-pub struct ScriptAuthenticator {
-    creds: Credentials,
-    token: RwLock<Option<Token>>,
-}
+pub mod authenticator {
+    use std::sync::RwLock;
+    use reqwest::{StatusCode, blocking::{Client, Response}};
+    use crate::reddit::{Result, Error};
 
-impl ScriptAuthenticator {
-    pub fn new(creds: Credentials) -> Self {
-        Self {
-            creds,
-            token: RwLock::new(None),
+    use super::{ClientInfo, Credentials, Token};
+    use serde::Deserialize;
+
+    /// Behavior of something that can provide access to the Reddit API.
+    pub trait Authenticator: std::fmt::Debug + Send + Sync {
+        /// Refresh/fetch the token from the Reddit API.
+        fn login(&self, client: &Client) -> Result<()>;
+        /// Provide a token to authenticate to the reddit API with.
+        /// If this is invalid(outdated) or None, [`login`] should refresh it.
+        fn token(&self) -> Option<Token>;
+        /// This authenticator can make requests that pertain to a user, such as posting a comment etc.
+        fn is_user(&self) -> bool;
+
+        /// Convenience
+        fn parse_response(&self, response: Response) -> Result<Token> {
+            let status = response.status();
+            let slice = &response.text()?;
+
+            // Parse the response as JSON.
+            if let Ok(token) = serde_json::from_str::<Token>(slice) {
+                Ok(token)
+            }
+            // Various errors that can occur
+            else if let Ok(error) = serde_json::from_str::<OkButError>(slice) {
+                Err(Error::AuthenticationError(format!(
+                    "{}, Reddit returned: {}",
+                    "Username or password are most likely wrong", error.error
+                )))
+            } else if status == StatusCode::UNAUTHORIZED {
+                Err(Error::AuthenticationError(String::from(
+                    "Client ID or Secret are wrong. Reddit returned 401 Unauthorized",
+                )))
+            }
+            // Unknown what went wrong
+            else {
+                return Err(Error::AuthenticationError(format!(
+                    "Unexpected error occured, text: {}, code: {}",
+                    slice, &status
+                )));
+            }
         }
     }
-}
 
-impl Authenticator for ScriptAuthenticator {
-    fn login(&self, client: &Client) -> Result<()> {
-        // Make the request for the access token.
-        let response = client
-            .post("https://www.reddit.com/api/v1/access_token")
-            .query(&[
-                ("grant_type", "password"),
-                ("username", &self.creds.username),
-                ("password", &self.creds.password),
-            ])
-            .basic_auth(
-                self.creds.client_info.client_id.clone(),
-                Some(self.creds.client_info.client_secret.clone()),
-            )
-            .send()?;
-
-        *self
-            .token
-            .write()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew") =
-            Some(self.parse_response(response)?);
-
-        Ok(())
+    /// Authenticator for Script applications.
+    /// This includes username and password, which means you are logged in, and can perform actions such as voting.
+    /// See also reddit OAuth API docs.
+    #[derive(Debug)]
+    pub struct ScriptAuthenticator {
+        creds: Credentials,
+        token: RwLock<Option<Token>>,
     }
 
-    fn token(&self) -> Option<Token> {
-        self.token
-            .read()
-            .expect("Poisoned mutex, report bug at https://github.com/Zower/snew")
-            .clone()
-    }
-
-    fn is_user(&self) -> bool {
-        true
-    }
-}
-
-/// Anonymous authentication.
-/// You will still need a client ID and secret, but you will not be logged in as some user. You can browse reddit, but not e.g. vote.
-#[derive(Debug)]
-pub struct AnonymousAuthenticator {
-    client_info: ClientInfo,
-    token: RwLock<Option<Token>>,
-}
-
-impl AnonymousAuthenticator {
-    pub fn new(client_id: &str, client_secret: &str) -> Self {
-        Self {
-            client_info: ClientInfo {
-                client_id: String::from(client_id),
-                client_secret: String::from(client_secret),
-            },
-            token: RwLock::new(None),
+    impl ScriptAuthenticator {
+        pub fn new(creds: Credentials) -> Self {
+            Self {
+                creds,
+                token: RwLock::new(None),
+            }
         }
     }
+
+    impl Authenticator for ScriptAuthenticator {
+        fn login(&self, client: &Client) -> Result<()> {
+            // Make the request for the access token.
+            let response = client
+                .post("https://www.reddit.com/api/v1/access_token")
+                .query(&[
+                    ("grant_type", "password"),
+                    ("username", &self.creds.username),
+                    ("password", &self.creds.password),
+                ])
+                .basic_auth(
+                    self.creds.client_info.client_id.clone(),
+                    Some(self.creds.client_info.client_secret.clone()),
+                )
+                .send()?;
+
+            *self
+                .token
+                .write()
+                .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew") =
+                Some(self.parse_response(response)?);
+
+            Ok(())
+        }
+
+        fn token(&self) -> Option<Token> {
+            self.token
+                .read()
+                .expect("Poisoned mutex, report bug at https://github.com/Zower/snew")
+                .clone()
+        }
+
+        fn is_user(&self) -> bool {
+            true
+        }
+    }
+
+    /// Anonymous authentication.
+    /// You will still need a client ID and secret, but you will not be logged in as some user. You can browse reddit, but not e.g. vote.
+    #[derive(Debug)]
+    pub struct AnonymousAuthenticator {
+        client_info: ClientInfo,
+        token: RwLock<Option<Token>>,
+    }
+
+    impl AnonymousAuthenticator {
+        pub fn new(client_id: &str, client_secret: &str) -> Self {
+            Self {
+                client_info: ClientInfo {
+                    client_id: String::from(client_id),
+                    client_secret: String::from(client_secret),
+                },
+                token: RwLock::new(None),
+            }
+        }
+    }
+
+    impl Authenticator for AnonymousAuthenticator {
+        fn login(&self, client: &Client) -> Result<()> {
+            // Make the request for the access token.
+            let response = client
+                .post("https://www.reddit.com/api/v1/access_token")
+                .query(&[("grant_type", "client_credentials")])
+                .basic_auth(
+                    self.client_info.client_id.clone(),
+                    Some(self.client_info.client_secret.clone()),
+                )
+                .send()?;
+
+            *self
+                .token
+                .write()
+                .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew") =
+                Some(self.parse_response(response)?);
+            Ok(())
+        }
+        fn token(&self) -> Option<Token> {
+            self.token
+                .read()
+                .expect("Poisoned mutex, report bug at https://github.com/Zower/snew")
+                .clone()
+        }
+
+        fn is_user(&self) -> bool {
+            false
+        }
+    }
+
+    // Reddit can return 200 OK even if the credentials are wrong, in which case it will include one field, "error": "message"
+    #[derive(Deserialize)]
+    struct OkButError {
+        error: String,
+    }
 }
 
-impl Authenticator for AnonymousAuthenticator {
-    fn login(&self, client: &Client) -> Result<()> {
-        // Make the request for the access token.
-        let response = client
-            .post("https://www.reddit.com/api/v1/access_token")
-            .query(&[("grant_type", "client_credentials")])
-            .basic_auth(
-                self.client_info.client_id.clone(),
-                Some(self.client_info.client_secret.clone()),
-            )
-            .send()?;
-
-        *self
-            .token
-            .write()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew") =
-            Some(self.parse_response(response)?);
-        Ok(())
-    }
-    fn token(&self) -> Option<Token> {
-        self.token
-            .read()
-            .expect("Poisoned mutex, report bug at https://github.com/Zower/snew")
-            .clone()
-    }
-
-    fn is_user(&self) -> bool {
-        false
-    }
-}
-
-// Reddit can return 200 OK even if the credentials are wrong, in which case it will include one field, "error": "message"
-#[derive(Deserialize)]
-struct OkButError {
-    error: String,
-}

@@ -1,5 +1,5 @@
 //! Reddit API.
-use crate::auth::{AuthenticatedClient, Authenticator};
+use crate::auth::{AuthenticatedClient, authenticator::Authenticator};
 use crate::things::*;
 
 use std::sync::Arc;
