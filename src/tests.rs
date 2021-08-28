@@ -17,7 +17,11 @@ mod tests {
             &env::var("REDDIT_USERNAME").unwrap(),
             &env::var("REDDIT_PASSWORD").unwrap(),
         ));
-        let reddit = Reddit::new(script_auth, &format!("Windows:snew:v0.1.0 (by /u/{})", username)).unwrap();
+        let reddit = Reddit::new(
+            script_auth,
+            &format!("Windows:snew:v0.1.0 (by /u/{})", username),
+        )
+        .unwrap();
 
         println!("{:?}", reddit.me()?);
 
