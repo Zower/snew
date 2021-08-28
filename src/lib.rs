@@ -26,10 +26,7 @@
 //! ```no_run
 //! use snew::{reddit::Reddit, auth::{authenticator::AnonymousAuthenticator, Credentials}};
 //!
-//! let app_auth = AnonymousAuthenticator::new(
-//!     "client_id",
-//!     "client_secret",
-//! );
+//! let app_auth = AnonymousAuthenticator::new();
 //!
 //! let reddit = Reddit::new(
 //!     app_auth,

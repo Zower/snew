@@ -33,10 +33,7 @@ mod tests {
 
     #[test]
     fn anonymous() -> Result<()> {
-        let anon_auth = AnonymousAuthenticator::new(
-            &env::var("REDDIT_CLIENT_ID").unwrap(),
-            &env::var("REDDIT_CLIENT_SECRET").unwrap(),
-        );
+        let anon_auth = AnonymousAuthenticator::new();
 
         let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by anonymous)").unwrap();
 
@@ -88,10 +85,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn unauthorized_anonoymous() {
-        let anon_auth = AnonymousAuthenticator::new(
-            &env::var("REDDIT_CLIENT_ID").unwrap(),
-            &env::var("REDDIT_CLIENT_SECRET").unwrap(),
-        );
+        let anon_auth = AnonymousAuthenticator::new();
         let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by anonymous)").unwrap();
 
         reddit.me().unwrap();

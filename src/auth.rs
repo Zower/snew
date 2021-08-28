@@ -122,17 +122,11 @@ impl AuthenticatedClient {
     }
 }
 
-/// Client ID and Secret for the application
-#[derive(Debug, Clone)]
-pub struct ClientInfo {
-    pub client_id: String,
-    pub client_secret: String,
-}
-
 /// Login credentials
 #[derive(Debug, Clone)]
 pub struct Credentials {
-    client_info: ClientInfo,
+    pub client_id: String,
+    pub client_secret: String,
     pub username: String,
     pub password: String,
 }
@@ -140,10 +134,8 @@ pub struct Credentials {
 impl Credentials {
     pub fn new(client_id: &str, client_secret: &str, username: &str, password: &str) -> Self {
         Self {
-            client_info: ClientInfo {
-                client_id: String::from(client_id),
-                client_secret: String::from(client_secret),
-            },
+            client_id: String::from(client_id),
+            client_secret: String::from(client_secret),
             username: String::from(username),
             password: String::from(password),
         }
@@ -151,15 +143,15 @@ impl Credentials {
 }
 
 pub mod authenticator {
-    use crate::reddit::{Error, Result};
     use reqwest::{
         blocking::{Client, Response},
         StatusCode,
     };
+    use serde::Deserialize;
     use std::sync::RwLock;
 
-    use super::{ClientInfo, Credentials, Token};
-    use serde::Deserialize;
+    use super::{Credentials, Token};
+    use crate::reddit::{Error, Result};
 
     /// Behavior of something that can provide access to the Reddit API.
     pub trait Authenticator: std::fmt::Debug + Send + Sync {
@@ -188,7 +180,7 @@ pub mod authenticator {
                 )))
             } else if status == StatusCode::UNAUTHORIZED {
                 Err(Error::AuthenticationError(String::from(
-                    "Client ID or Secret are wrong. Reddit returned 401 Unauthorized",
+                    "Reddit returned 401 Unauthorized, are client ID and secret correct?",
                 )))
             }
             // Unknown what went wrong
@@ -230,8 +222,8 @@ pub mod authenticator {
                     ("password", &self.creds.password),
                 ])
                 .basic_auth(
-                    self.creds.client_info.client_id.clone(),
-                    Some(self.creds.client_info.client_secret.clone()),
+                    self.creds.client_id.clone(),
+                    Some(self.creds.client_secret.clone()),
                 )
                 .send()?;
 
@@ -260,17 +252,12 @@ pub mod authenticator {
     /// You will still need a client ID and secret, but you will not be logged in as some user. You can browse reddit, but not e.g. vote.
     #[derive(Debug)]
     pub struct AnonymousAuthenticator {
-        client_info: ClientInfo,
         token: RwLock<Option<Token>>,
     }
 
     impl AnonymousAuthenticator {
-        pub fn new(client_id: &str, client_secret: &str) -> Self {
+        pub fn new() -> Self {
             Self {
-                client_info: ClientInfo {
-                    client_id: String::from(client_id),
-                    client_secret: String::from(client_secret),
-                },
                 token: RwLock::new(None),
             }
         }
@@ -281,11 +268,17 @@ pub mod authenticator {
             // Make the request for the access token.
             let response = client
                 .post("https://www.reddit.com/api/v1/access_token")
-                .query(&[("grant_type", "client_credentials")])
-                .basic_auth(
-                    self.client_info.client_id.clone(),
-                    Some(self.client_info.client_secret.clone()),
+                .header(
+                    reqwest::header::AUTHORIZATION,
+                    "Basic aF9JbDA3N3B4RzE2SzFQYWhySHZ0QTo=",
                 )
+                .query(&[
+                    (
+                        "grant_type",
+                        "https://oauth.reddit.com/grants/installed_client",
+                    ),
+                    ("device_id", "DO_NOT_TRACK_THIS_DEVICE"),
+                ])
                 .send()?;
 
             *self
