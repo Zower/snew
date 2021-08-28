@@ -34,10 +34,9 @@ pub const URL: &str = "https://oauth.reddit.com";
 /// println!("{:?}", reddit.me().unwrap());
 /// ```
 /// See also [`Reddit::subreddit`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Reddit {
-    client: Arc<AuthenticatedClient>,
-    url: String,
+    inner: Arc<AuthenticatedClient>,
 }
 
 // The API calls.
@@ -47,18 +46,17 @@ impl Reddit {
         let client = AuthenticatedClient::new(authenticator, user_agent)?;
 
         Ok(Self {
-            client: Arc::new(client),
-            url: String::from(URL),
+            inner: Arc::new(client),
         })
     }
 
     /// Get information about the user, useful for debugging.
     pub fn me(&self) -> Result<Me> {
-        if self.client.authenticator.is_user() {
+        if self.inner.authenticator.is_user() {
             Ok(serde_json::from_str(
                 &self
-                    .client
-                    .get(&format!("{}{}", self.url, "/api/v1/me"), None::<&()>)?
+                    .inner
+                    .get(&format!("{}{}", URL, "/api/v1/me"), None::<&()>)?
                     .text()?,
             )?)
         } else {
@@ -103,15 +101,15 @@ impl Reddit {
     /// # }
 
     pub fn subreddit(&self, name: &str) -> Subreddit {
-        Subreddit::create(name, self.client.clone())
+        Subreddit::create(name, self.inner.clone())
     }
 
     /// Posts from the frontpage.
     pub fn frontpage(&self) -> Subreddit {
         Subreddit {
             name: String::from("frontpage"),
-            url: self.url.clone(),
-            client: self.client.clone(),
+            url: URL.to_string(),
+            client: self.inner.clone(),
         }
     }
 

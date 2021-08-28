@@ -115,7 +115,7 @@ impl AuthenticatedClient {
 
     // Make a reqwest client with user_agent set as a default header.
     fn make_client(user_agent: &str) -> Result<Client> {
-        Ok(Client::builder().user_agent(user_agent).build()?)
+        Ok(Client::builder().user_agent(user_agent).gzip(true).build()?)
     }
 }
 
