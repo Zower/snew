@@ -80,10 +80,8 @@ impl Subreddit {
 pub struct Post {
     client: Arc<AuthenticatedClient>,
     pub title: String,
-    /// Upvotes.
-    pub ups: i32,
-    /// Downvotes.
-    pub downs: i32,
+    /// The score. Upvotes - downvotes.
+    pub score: i32,
     /// The associated URL of this post. It is an external website if the post is a link, otherwise the comment section.
     pub url: String,
     /// The author.
@@ -249,8 +247,7 @@ impl From<(RawKind<RawPostData>, Arc<AuthenticatedClient>)> for Post {
         Self {
             client,
             title: raw.data.title,
-            ups: raw.data.ups,
-            downs: raw.data.downs,
+            score: raw.data.score,
             url: raw.data.url,
             author: raw.data.author,
             subreddit: raw.data.subreddit,
@@ -299,51 +296,51 @@ struct Empty {}
 
 // The raw responses from Reddit. The interpreted structs like [`crate::things::Subreddit`] and [`crate::things::Post`] are meant to be used.
 #[doc(hidden)]
-pub mod raw {
+pub(crate) mod raw {
     use serde::Deserialize;
 
     #[derive(Debug, Clone, Deserialize)]
-    pub struct Pagination {
+    pub(crate) struct Pagination {
         pub(crate) after: Option<String>,
         pub(crate) before: Option<String>,
     }
 
-    pub mod listing {
+    pub(crate) mod listing {
         use super::Pagination;
         use serde::Deserialize;
 
         // Listings from Reddit take this form.
         #[derive(Debug, Clone, Deserialize)]
-        pub struct RawListing<T> {
+        pub(crate) struct RawListing<T> {
             pub(crate) data: RawListingData<T>,
         }
 
         #[derive(Debug, Clone, Deserialize)]
-        pub struct RawListingData<T> {
+        pub(crate) struct RawListingData<T> {
             #[serde(flatten)]
             pub(crate) pagination: Pagination,
             pub(crate) children: Vec<T>,
         }
     }
 
-    pub mod generic_kind {
+    pub(crate) mod generic_kind {
         use serde::Deserialize;
 
         #[derive(Debug, Deserialize)]
-        pub struct RawKind<T> {
+        pub(crate) struct RawKind<T> {
             pub(crate) data: T,
             pub(crate) kind: String,
         }
     }
 
-    pub mod post {
+    pub(crate) mod post {
         use serde::Deserialize;
 
         #[derive(Debug, Clone, Deserialize)]
-        pub struct RawPostData {
+        pub(crate) struct RawPostData {
             pub(crate) title: String,
-            pub(crate) ups: i32,
-            pub(crate) downs: i32,
+            #[serde(rename = "ups")]
+            pub(crate) score: i32,
             pub(crate) url: String,
             pub(crate) author: String,
             pub(crate) subreddit: String,
@@ -352,11 +349,11 @@ pub mod raw {
         }
     }
 
-    pub mod comment {
+    pub(crate) mod comment {
         use serde::Deserialize;
 
         #[derive(Debug, Clone, Deserialize)]
-        pub struct RawCommentData {
+        pub(crate) struct RawCommentData {
             pub(crate) author: String,
             pub(crate) body: String,
             pub(crate) id: String,
