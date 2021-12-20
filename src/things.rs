@@ -8,6 +8,9 @@ use crate::{auth::AuthenticatedClient, reddit::Result};
 
 use std::sync::Arc;
 
+#[cfg(feature = "parse_content")]
+use crate::content::Content;
+
 /// A handle to interact with a subreddit.
 /// See [`PostFeed`] for some gotchas when iterating over Posts.
 #[derive(Debug)]
@@ -86,10 +89,16 @@ pub struct Post {
     pub url: String,
     /// The author.
     pub author: String,
-    /// The text of this post.
-    pub selftext: String,
-    /// The subreddit this post belongs to
+    /// The text of this post. None if is_self is false.
+    pub selftext: Option<String>,
+    /// The subreddit name this post belongs to
     pub subreddit: String,
+    /// Number of comments
+    pub num_comments: u32,
+    /// Whether this is a self post. If true, [`url`] is just a link to thist post. If false, [`url`] is the external link.
+    pub is_self: bool,
+    /// Whether this post is NSFW. This field is named over_18 from the API.
+    pub nsfw: bool,
     /// The unique base 36 ID of this post
     pub id: String,
     /// The 'kind'. This should always be t3. Combine with [`Self::id`] to get the fullname of this post.
@@ -109,6 +118,16 @@ impl Post {
                 self.id
             ),
             cached_comments: Vec::new(),
+        }
+    }
+
+    #[cfg(feature = "parse_content")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "parse_content")))]
+    pub fn get_content(&self) -> Result<Content> {
+        return if let Some(selftext) = &self.selftext {
+            Ok(Content::Text(selftext.clone()))
+        } else {
+            Content::parse(&self.client.client, &self.url)
         }
     }
 }
@@ -215,35 +234,14 @@ pub struct Me {
     pub verified: bool,
 }
 
-pub trait Transpose<T> {
-    fn or_else_transpose<F: FnOnce() -> Result<Option<T>>>(self, f: F) -> Option<Result<T>>;
-}
-
-impl<T> Transpose<T> for Option<Result<T>> {
-    fn or_else_transpose<F: FnOnce() -> Result<Option<T>>>(self, f: F) -> Option<Result<T>> {
-        if self.is_none() {
-            f().transpose()
-        } else {
-            self
-        }
-    }
-}
-
-// fn or_else_transpose<T, F>(opt: Option<Result<T>>, f: F) -> Option<Result<T>>
-// where
-//     F: FnOnce() -> Result<Option<T>>,
-// {
-//     if let None = opt {
-//         f().transpose()
-//     } else {
-//         opt
-//     }
-// }
 
 // Create a post from som raw data.
 impl From<(RawKind<RawPostData>, Arc<AuthenticatedClient>)> for Post {
     fn from(raw: (RawKind<RawPostData>, Arc<AuthenticatedClient>)) -> Self {
         let (raw, client) = raw;
+
+        let selftext = if raw.data.is_self { Some(raw.data.selftext) } else { None };
+
         Self {
             client,
             title: raw.data.title,
@@ -251,7 +249,10 @@ impl From<(RawKind<RawPostData>, Arc<AuthenticatedClient>)> for Post {
             url: raw.data.url,
             author: raw.data.author,
             subreddit: raw.data.subreddit,
-            selftext: raw.data.selftext,
+            num_comments: raw.data.num_comments,
+            is_self: raw.data.is_self,
+            nsfw: raw.data.nsfw,
+            selftext, 
             id: raw.data.id,
             kind: raw.kind,
         }
@@ -265,6 +266,20 @@ impl From<RawKind<RawCommentData>> for Comment {
             author: raw.data.author,
             id: raw.data.id,
             body: raw.data.body,
+        }
+    }
+}
+
+pub trait Transpose<T> {
+    fn or_else_transpose<F: FnOnce() -> Result<Option<T>>>(self, f: F) -> Option<Result<T>>;
+}
+
+impl<T> Transpose<T> for Option<Result<T>> {
+    fn or_else_transpose<F: FnOnce() -> Result<Option<T>>>(self, f: F) -> Option<Result<T>> {
+        if self.is_none() {
+            f().transpose()
+        } else {
+            self
         }
     }
 }
@@ -345,6 +360,10 @@ pub(crate) mod raw {
             pub(crate) author: String,
             pub(crate) subreddit: String,
             pub(crate) selftext: String,
+            pub(crate) num_comments: u32,
+            pub(crate) is_self: bool,
+            #[serde(rename = "over_18")]
+            pub(crate) nsfw: bool,
             pub(crate) id: String,
         }
     }

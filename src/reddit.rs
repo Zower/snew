@@ -148,4 +148,8 @@ pub enum Error {
     /// This error occurs if you attempt to make some request that requires you to be logged in (e.g. script authentication), but you are authenticated anonymously.
     #[error("This action is only allowed when logged in, not with anonymous authentication.")]
     NotLoggedInError,
+
+    /// No content that snew knows how to handle.
+    #[error("No parseable content found")]
+    NoReadableContent,
 }

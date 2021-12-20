@@ -45,7 +45,11 @@
 //     missing_docs
 )]
 #![deny(unsafe_code)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 pub mod auth;
 pub mod reddit;
-mod tests;
 pub mod things;
+#[cfg(feature="parse_content")]
+pub mod content;
+mod tests;
+

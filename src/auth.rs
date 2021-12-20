@@ -248,29 +248,34 @@ pub mod authenticator {
         }
     }
 
-    /// Anonymous authentication.
-    /// You will still need a client ID and secret, but you will not be logged in as some user. You can browse reddit, but not e.g. vote.
+    /// Anonymous application authentication.
+    /// You will not be logged in as some user, but as your application on behalf of the user. You can browse reddit, but not e.g. vote.
     #[derive(Debug)]
-    pub struct AnonymousAuthenticator {
+    pub struct ApplicationAuthenticator {
+        encoded_auth: String,
         token: RwLock<Option<Token>>,
     }
 
-    impl AnonymousAuthenticator {
-        pub fn new() -> Self {
+    impl ApplicationAuthenticator {
+        pub fn new(client_id: impl ToString) -> Self {
+            //Maybe not?
+            let encoded_auth = base64::encode((client_id.to_string() + ":").as_bytes());
+
             Self {
                 token: RwLock::new(None),
+                encoded_auth
             }
         }
     }
 
-    impl Authenticator for AnonymousAuthenticator {
+    impl Authenticator for ApplicationAuthenticator {
         fn login(&self, client: &Client) -> Result<()> {
             // Make the request for the access token.
             let response = client
                 .post("https://www.reddit.com/api/v1/access_token")
                 .header(
                     reqwest::header::AUTHORIZATION,
-                    "Basic aF9JbDA3N3B4RzE2SzFQYWhySHZ0QTo=",
+                    format!("Basic {}", self.encoded_auth),
                 )
                 .query(&[
                     (

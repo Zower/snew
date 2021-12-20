@@ -2,7 +2,7 @@
 mod tests {
     use crate::{
         auth::{
-            authenticator::{AnonymousAuthenticator, ScriptAuthenticator},
+            authenticator::{ApplicationAuthenticator, ScriptAuthenticator},
             Credentials,
         },
         reddit::{Reddit, Result},
@@ -33,7 +33,7 @@ mod tests {
 
     #[test]
     fn anonymous() -> Result<()> {
-        let anon_auth = AnonymousAuthenticator::new();
+        let anon_auth = ApplicationAuthenticator::new("h_Il077pxG16K1PahrHvtA");
 
         let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by anonymous)").unwrap();
 
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn unauthorized_anonoymous() {
-        let anon_auth = AnonymousAuthenticator::new();
+        let anon_auth = ApplicationAuthenticator::new(env::var("REDDIT_CLIENT_ID").unwrap());
         let reddit = Reddit::new(anon_auth, "Windows:snew:v0.1.0 (by anonymous)").unwrap();
 
         reddit.me().unwrap();
