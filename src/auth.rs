@@ -263,7 +263,7 @@ pub mod authenticator {
 
             Self {
                 token: RwLock::new(None),
-                encoded_auth
+                encoded_auth,
             }
         }
     }

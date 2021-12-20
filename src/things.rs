@@ -128,7 +128,7 @@ impl Post {
             Ok(Content::Text(selftext.clone()))
         } else {
             Content::parse(&self.client.client, &self.url)
-        }
+        };
     }
 }
 
@@ -234,13 +234,16 @@ pub struct Me {
     pub verified: bool,
 }
 
-
 // Create a post from som raw data.
 impl From<(RawKind<RawPostData>, Arc<AuthenticatedClient>)> for Post {
     fn from(raw: (RawKind<RawPostData>, Arc<AuthenticatedClient>)) -> Self {
         let (raw, client) = raw;
 
-        let selftext = if raw.data.is_self { Some(raw.data.selftext) } else { None };
+        let selftext = if raw.data.is_self {
+            Some(raw.data.selftext)
+        } else {
+            None
+        };
 
         Self {
             client,
@@ -252,7 +255,7 @@ impl From<(RawKind<RawPostData>, Arc<AuthenticatedClient>)> for Post {
             num_comments: raw.data.num_comments,
             is_self: raw.data.is_self,
             nsfw: raw.data.nsfw,
-            selftext, 
+            selftext,
             id: raw.data.id,
             kind: raw.kind,
         }

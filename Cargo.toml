@@ -12,11 +12,10 @@ serde_json = "1.0.64"
 reqwest = {version = "0.11.3", features=["json", "blocking", "gzip"]}
 thiserror = "1.0.25"
 base64 = "0.13.0"
-image = { version = "0.23.14", optional = true }
 bytes = { version = "1.1.0", optional = true }
 
 [features]
-parse_content = ["image", "bytes"]
+parse_content = ["bytes"]
 
 [package.metadata.docs.rs]
 all-features = true

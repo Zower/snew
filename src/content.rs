@@ -6,7 +6,7 @@ use crate::reddit::{Error, Result};
 #[derive(Debug)]
 pub enum Content {
     Text(String),
-    Image(Bytes)
+    Image(Bytes),
 }
 
 impl Content {
@@ -22,7 +22,7 @@ impl Content {
                 } else if kind == "text" || kind == "html" {
                     return Ok(Content::Text(response.text()?));
                 }
-            } 
+            }
         }
 
         Err(Error::NoReadableContent)
