@@ -19,7 +19,7 @@ impl Content {
             if let Some(kind) = string {
                 if kind == "image" {
                     return Ok(Self::Image(response.bytes()?));
-                } else if kind == "text" || kind == "html" {
+                } else if kind == "text" {
                     return Ok(Content::Text(response.text()?));
                 }
             }
