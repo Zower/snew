@@ -6,6 +6,7 @@ use crate::reddit::{Error, Result};
 #[derive(Debug)]
 pub enum Content {
     Text(String),
+    Html(String),
     Image(Bytes),
 }
 
@@ -15,12 +16,14 @@ impl Content {
         let content_type = response.headers().get("Content-Type");
 
         if let Some(content_type) = content_type {
-            let string = content_type.to_str().unwrap().split("/").next();
-            if let Some(kind) = string {
+            let mut split = content_type.to_str().unwrap().split("/");
+            if let Some(kind) = split.next() {
                 if kind == "image" {
                     return Ok(Self::Image(response.bytes()?));
+                } else if kind == "text" && split.next() == Some("html") {
+                    return Ok(Self::Html(response.text()?))
                 } else if kind == "text" {
-                    return Ok(Content::Text(response.text()?));
+                    return Ok(Self::Text(response.text()?));
                 }
             }
         }

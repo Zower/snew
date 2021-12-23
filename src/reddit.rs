@@ -1,8 +1,9 @@
 //! Reddit API.
-use crate::auth::{authenticator::Authenticator, AuthenticatedClient};
+use crate::auth::{UserAuthenticator, AuthenticatedClient, Authenticator};
 use crate::things::*;
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
@@ -52,7 +53,7 @@ impl Reddit {
 
     /// Get information about the user, useful for debugging.
     pub fn me(&self) -> Result<Me> {
-        if self.inner.authenticator.is_user() {
+        if self.inner.authenticator.is_logged_in() {
             Ok(serde_json::from_str(
                 &self
                     .inner
@@ -122,6 +123,119 @@ impl Reddit {
     //     )
     //     .submit(title, text)
     // }
+
+}
+
+#[cfg(feature = "code_flow")]
+impl Reddit {
+    /// A function that, from start to finish, performs the full OAuth2 code flow described in https://github.com/reddit-archive/reddit/wiki/OAuth2 and returns an Authenticator with a valid refresh token.
+    /// You can retrieve the token for serialization later with [`Authenticator::get_token()`].
+    /// 
+    /// You will need a application registered following the instructions in [`Reddit`], noting:
+    /// * Choose a _installed app_
+    /// * You MUST set the redirect URI to 'http://localhost:8080'.
+    /// 
+    /// In full, this function will:
+    /// * Spawn a web server on localhost, listening on port 8080.
+    /// * Use the ```opener``` crate to open a URL in the users browser.
+    /// * There, the user can accept that you would like to use Reddit on their behalf.
+    /// * If they do, reddit makes a request to your local webserver, and gives us back a code.
+    /// * We trade that code in for a refresh token.
+    /// 
+    /// If you would rather do this work yourself, just get the refresh_token, and pass it to [`UserAuthenticator::new()`].
+    pub fn perform_code_flow(
+        client_id: impl std::fmt::Display,
+        success_response: &'static str,
+        timeout: Option<Duration>,
+    ) -> std::result::Result<UserAuthenticator, Box<dyn std::error::Error + Send + Sync>> {
+        use rand::Rng;
+        use reqwest::blocking::Client;
+        use rouille::{Response as RouilleResponse, Server};
+        use std::sync::RwLock;
+
+        use crate::auth::parse_response;
+
+        let initial = Instant::now();
+        // Somewhat jank structure that holds either (state, code) or an error.
+        let result: Arc<RwLock<Option<std::result::Result<(String, String), String>>>> =
+            Arc::new(RwLock::new(None));
+        let copy = result.clone();
+
+        // Spawn the server
+        let server = Server::new("localhost:8080", move |request| {
+            if let Some(error) = request.get_param("error") {
+                let response = format!("Something went wrong: {}", error);
+                *copy.write().unwrap() = Some(Err(error));
+
+                return RouilleResponse::text(response);
+            }
+
+            let state = request.get_param("state");
+            let code = request.get_param("code");
+
+            if let Some(state) = state {
+                if let Some(code) = code {
+                    *copy.write().unwrap() = Some(Ok((state, code)));
+                    return RouilleResponse::text(success_response);
+                }
+            }
+
+            RouilleResponse::text(format!("Missing state or code parameter. This is a bug from Reddit. Try again. Parameters reddit returned: {}", request.raw_query_string()))
+        })?;
+
+        let (_, sender) = server.stoppable();
+
+        let state: String = rand::thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(25)
+            .map(char::from)
+            .collect();
+
+        let url = format!("https://www.reddit.com/api/v1/authorize?client_id={}&response_type=code\
+                                    &state={}&redirect_uri=http://localhost:8080&duration=permanent&scope=*", client_id, state);
+
+        // Open the url, presumably in the users browser.
+        opener::open_browser(url)?;
+
+        let stop_duration = if let Some(timeout) = timeout {
+            if initial.elapsed() >= timeout {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        // Spin while waiting for request. Could be more efficient, send an issue if this is actually causing a problem for you, and I will fix it.
+        while result
+            .read()
+            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew")
+            .is_none()
+            && !stop_duration
+        {}
+
+        sender.send(())?;
+
+        // Must be some by this point
+        let result = result.write().expect("Poisoned RwLock, report bug at https://github.com/Zower/snew").take().unwrap()?;
+
+        // Verify state
+        if state == result.0 {
+            let client = Client::new();
+
+            // Finally, get the refresh token.
+            let response = client.post("https://www.reddit.com/api/v1/access_token")
+            .body(format!("grant_type=authorization_code&code={}&redirect_uri={}", result.1, "http://localhost:8080"))
+            .basic_auth(&client_id, None::<String>).send()?;
+
+            let mut token = parse_response(response)?;
+
+            Ok(UserAuthenticator::new_complete(token.refresh_token.take().unwrap(), client_id, token.into()))
+        } else {
+            Err(Box::new(CodeFlowError::StateDidNotMatch(state,  result.0)))
+        }
+    }
 }
 
 /// All errors that can occur when using Snew. The source error (e.g. from a separate library), if any, can be found by calling error.source().
@@ -152,4 +266,13 @@ pub enum Error {
     /// No content that snew knows how to handle.
     #[error("No parseable content found")]
     NoReadableContent,
+}
+
+#[cfg(feature = "code_flow")]
+#[derive(Error, Debug)]
+pub enum CodeFlowError {
+    #[error("Received state did not match original state. Original:\t{0}\tReceived:\t{1}")]
+    StateDidNotMatch(String, String),
+    #[error("Other error:\t{0}")]
+    RedditError(#[from] Error)
 }

@@ -11,11 +11,14 @@ serde = {version = "1.0.126", features=["derive"]}
 serde_json = "1.0.64"
 reqwest = {version = "0.11.3", features=["json", "blocking", "gzip"]}
 thiserror = "1.0.25"
-base64 = "0.13.0"
 bytes = { version = "1.1.0", optional = true }
+rouille = { version = "3.5.0", optional = true }
+opener = { version = "0.5.0", optional = true }
+rand = { version = "0.8.4", optional = true }
 
 [features]
 parse_content = ["bytes"]
+code_flow = ["rouille", "opener", "rand"]
 
 [package.metadata.docs.rs]
 all-features = true
