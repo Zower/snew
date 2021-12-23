@@ -180,11 +180,15 @@ impl UserAuthenticator {
         }
     }
 
-    pub fn new_complete(refresh_token: impl ToString, client_id: impl ToString, token: Token) -> Self {
+    pub fn new_complete(
+        refresh_token: impl ToString,
+        client_id: impl ToString,
+        token: Token,
+    ) -> Self {
         Self {
             refresh_token: refresh_token.to_string(),
             token: RwLock::new(Some(token)),
-            client_id: client_id.to_string()
+            client_id: client_id.to_string(),
         }
     }
 }
@@ -350,7 +354,6 @@ pub(crate) fn parse_response(response: Response) -> Result<TokenJson> {
     if let Ok(token) = serde_json::from_str::<TokenJson>(slice) {
         Ok(token)
     }
-
     // Various errors that can occur
     else if let Ok(error) = serde_json::from_str::<OkButError>(slice) {
         Err(Error::AuthenticationError(format!(
@@ -377,7 +380,7 @@ pub(crate) struct TokenJson {
     pub expires_in: i32,
     pub scope: String,
     pub token_type: String,
-    pub refresh_token: Option<String>
+    pub refresh_token: Option<String>,
 }
 
 impl From<TokenJson> for Token {
@@ -386,7 +389,7 @@ impl From<TokenJson> for Token {
             access_token: token.access_token,
             expires_in: token.expires_in,
             scope: token.scope,
-            token_type: token.token_type
+            token_type: token.token_type,
         }
     }
 }

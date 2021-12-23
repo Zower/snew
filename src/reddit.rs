@@ -1,5 +1,5 @@
 //! Reddit API.
-use crate::auth::{UserAuthenticator, AuthenticatedClient, Authenticator};
+use crate::auth::{AuthenticatedClient, Authenticator, UserAuthenticator};
 use crate::things::*;
 
 use std::sync::Arc;
@@ -123,25 +123,24 @@ impl Reddit {
     //     )
     //     .submit(title, text)
     // }
-
 }
 
 #[cfg(feature = "code_flow")]
 impl Reddit {
     /// A function that, from start to finish, performs the full OAuth2 code flow described in https://github.com/reddit-archive/reddit/wiki/OAuth2 and returns an Authenticator with a valid refresh token.
     /// You can retrieve the token for serialization later with [`Authenticator::get_token()`].
-    /// 
+    ///
     /// You will need a application registered following the instructions in [`Reddit`], noting:
     /// * Choose a _installed app_
     /// * You MUST set the redirect URI to 'http://localhost:8080'.
-    /// 
+    ///
     /// In full, this function will:
     /// * Spawn a web server on localhost, listening on port 8080.
     /// * Use the ```opener``` crate to open a URL in the users browser.
     /// * There, the user can accept that you would like to use Reddit on their behalf.
     /// * If they do, reddit makes a request to your local webserver, and gives us back a code.
     /// * We trade that code in for a refresh token.
-    /// 
+    ///
     /// If you would rather do this work yourself, just get the refresh_token, and pass it to [`UserAuthenticator::new()`].
     pub fn perform_code_flow(
         client_id: impl std::fmt::Display,
@@ -218,22 +217,35 @@ impl Reddit {
         sender.send(())?;
 
         // Must be some by this point
-        let result = result.write().expect("Poisoned RwLock, report bug at https://github.com/Zower/snew").take().unwrap()?;
+        let result = result
+            .write()
+            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew")
+            .take()
+            .unwrap()?;
 
         // Verify state
         if state == result.0 {
             let client = Client::new();
 
             // Finally, get the refresh token.
-            let response = client.post("https://www.reddit.com/api/v1/access_token")
-            .body(format!("grant_type=authorization_code&code={}&redirect_uri={}", result.1, "http://localhost:8080"))
-            .basic_auth(&client_id, None::<String>).send()?;
+            let response = client
+                .post("https://www.reddit.com/api/v1/access_token")
+                .body(format!(
+                    "grant_type=authorization_code&code={}&redirect_uri={}",
+                    result.1, "http://localhost:8080"
+                ))
+                .basic_auth(&client_id, None::<String>)
+                .send()?;
 
             let mut token = parse_response(response)?;
 
-            Ok(UserAuthenticator::new_complete(token.refresh_token.take().unwrap(), client_id, token.into()))
+            Ok(UserAuthenticator::new_complete(
+                token.refresh_token.take().unwrap(),
+                client_id,
+                token.into(),
+            ))
         } else {
-            Err(Box::new(CodeFlowError::StateDidNotMatch(state,  result.0)))
+            Err(Box::new(CodeFlowError::StateDidNotMatch(state, result.0)))
         }
     }
 }
@@ -274,5 +286,5 @@ pub enum CodeFlowError {
     #[error("Received state did not match original state. Original:\t{0}\tReceived:\t{1}")]
     StateDidNotMatch(String, String),
     #[error("Other error:\t{0}")]
-    RedditError(#[from] Error)
+    RedditError(#[from] Error),
 }

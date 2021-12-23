@@ -5,7 +5,7 @@ mod tests {
         reddit::{Reddit, Result},
     };
 
-    use std::{env, time::Duration};
+    use std::env;
 
     #[test]
     fn it_works() -> Result<()> {
@@ -106,24 +106,5 @@ mod tests {
         println!("{:?}", reddit);
 
         reddit.unwrap();
-    }
-
-    #[test]
-    fn open() {
-        let user_auth = Reddit::perform_code_flow(
-            "h_Il077pxG16K1PahrHvtA",
-            "Ok, you can return to snew now!",
-            Some(Duration::from_secs(180)),
-        ).unwrap();
-
-        let reddit = Reddit::new(
-            user_auth, 
-            "<Operating system>:snew:v0.1.0 (by /u/<reddit username>)"
-        ).unwrap();
-
-        for post in reddit.frontpage().hot().take(50) {
-            let post = post.unwrap();
-            println!("{:?}", post);
-        }
     }
 }

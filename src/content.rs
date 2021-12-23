@@ -21,7 +21,7 @@ impl Content {
                 if kind == "image" {
                     return Ok(Self::Image(response.bytes()?));
                 } else if kind == "text" && split.next() == Some("html") {
-                    return Ok(Self::Html(response.text()?))
+                    return Ok(Self::Html(response.text()?));
                 } else if kind == "text" {
                     return Ok(Self::Text(response.text()?));
                 }

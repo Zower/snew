@@ -39,7 +39,7 @@
 //! # User authentication for installed apps. Requires the 'code_flow' feature.
 //! ```no_run
 //! use snew::{reddit::Reddit};
-//! 
+//!
 //! // Wait 180 seconds for the user to complete their end of the flow
 //! let user_auth = Reddit::perform_code_flow("client_id", "Great, return to the app now", Some(Duration::from_secs(180)))
 //!
