@@ -41,7 +41,6 @@ impl AuthenticatedClient {
 
     pub fn set_authenticator<T: Authenticator + 'static>(&self, authenticator: T) {
         *self.authenticator.write().unwrap() = Box::new(authenticator);
-        // self.authenticator = Box::new(authenticator);
     }
 
     /// Make a get request to `url`
