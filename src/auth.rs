@@ -217,7 +217,7 @@ impl Authenticator for UserAuthenticator {
     }
 
     fn is_logged_in(&self) -> bool {
-        self.token.read().unwrap().is_some()
+        true
     }
 
     fn refresh_token(&self) -> Option<String> {
@@ -266,7 +266,7 @@ impl Authenticator for ScriptAuthenticator {
     }
 
     fn is_logged_in(&self) -> bool {
-        self.token.read().unwrap().is_some()
+        true
     }
 
     fn refresh_token(&self) -> Option<String> {
