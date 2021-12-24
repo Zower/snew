@@ -2,7 +2,7 @@
 use crate::auth::{AuthenticatedClient, Authenticator, UserAuthenticator};
 use crate::things::*;
 
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant};
 
 use thiserror::Error;
@@ -51,9 +51,13 @@ impl Reddit {
         })
     }
 
+    pub fn set_authenticator<T: Authenticator + 'static>(&mut self, authenticator: T) {
+        self.inner.set_authenticator(authenticator);
+    }
+
     /// Get information about the user, useful for debugging.
     pub fn me(&self) -> Result<Me> {
-        if self.inner.authenticator.is_logged_in() {
+        if self.inner.authenticator.read().unwrap().is_logged_in() {
             Ok(serde_json::from_str(
                 &self
                     .inner
@@ -207,19 +211,14 @@ impl Reddit {
         };
 
         // Spin while waiting for request. Could be more efficient, send an issue if this is actually causing a problem for you, and I will fix it.
-        while result
-            .read()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew")
-            .is_none()
-            && !stop_duration
-        {}
+        while result.read().map_err(Into::<Error>::into)?.is_none() && !stop_duration {}
 
         sender.send(())?;
 
         // Must be some by this point
         let result = result
             .write()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew")
+            .map_err(Into::<Error>::into)?
             .take()
             .unwrap()?;
 
@@ -275,9 +274,19 @@ pub enum Error {
     #[error("This action is only allowed when logged in, not with anonymous authentication.")]
     NotLoggedInError,
 
+    /// Poisoned RwLock. This shouldn't really happen.
+    #[error("Poisoned RwLock, report bug at https://github.com/Zower/snew")]
+    PoisonError,
+
     /// No content that snew knows how to handle.
     #[error("No parseable content found")]
     NoReadableContent,
+}
+
+impl<T> From<PoisonError<T>> for Error {
+    fn from(_: PoisonError<T>) -> Self {
+        Self::PoisonError
+    }
 }
 
 #[cfg(feature = "code_flow")]

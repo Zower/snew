@@ -24,7 +24,7 @@ pub struct Token {
 #[derive(Debug)]
 pub struct AuthenticatedClient {
     pub(crate) client: Client,
-    pub(crate) authenticator: Box<dyn Authenticator>,
+    pub(crate) authenticator: RwLock<Box<dyn Authenticator>>,
 }
 
 impl AuthenticatedClient {
@@ -34,16 +34,21 @@ impl AuthenticatedClient {
         authenticator.login(&client)?;
 
         Ok(Self {
-            authenticator: Box::new(authenticator) as Box<dyn Authenticator>,
+            authenticator: RwLock::new(Box::new(authenticator) as Box<dyn Authenticator>),
             client,
         })
     }
 
+    pub fn set_authenticator<T: Authenticator + 'static>(&self, authenticator: T) {
+        *self.authenticator.write().unwrap() = Box::new(authenticator);
+        // self.authenticator = Box::new(authenticator);
+    }
+
     /// Make a get request to `url`
     /// Errors if the status code was unexpected, the client cannot re-initialize or make the request, or if the authentication fails.
-    pub fn get<Q: Serialize>(&self, url: &str, queries: Option<&Q>) -> Result<Response> {
+    pub(crate) fn get<Q: Serialize>(&self, url: &str, queries: Option<&Q>) -> Result<Response> {
         // Make one request
-        if let Some(token) = &self.authenticator.token() {
+        if let Some(token) = &self.authenticator.read().unwrap().token() {
             let response = self.make_request(&self.client, token, url, queries)?;
 
             if self.check_auth(&response)? {
@@ -52,9 +57,9 @@ impl AuthenticatedClient {
         }
 
         // Refresh token
-        self.authenticator.login(&self.client)?;
+        self.authenticator.read().unwrap().login(&self.client)?;
 
-        if let Some(ref token) = self.authenticator.token() {
+        if let Some(ref token) = self.authenticator.read().unwrap().token() {
             let response = self.make_request(&self.client, token, url, queries)?;
 
             if response.status() == StatusCode::OK {
@@ -204,27 +209,17 @@ impl Authenticator for UserAuthenticator {
             .basic_auth(&self.client_id, None::<String>)
             .send()?;
 
-        *self
-            .token
-            .write()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew") =
-            Some(parse_response(response)?.into());
+        *self.token.write()? = Some(parse_response(response)?.into());
 
         Ok(())
     }
 
     fn token(&self) -> Option<Token> {
-        self.token
-            .read()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew")
-            .clone()
+        self.token.read().unwrap().clone()
     }
 
     fn is_logged_in(&self) -> bool {
-        self.token
-            .read()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew")
-            .is_some()
+        self.token.read().unwrap().is_some()
     }
 
     fn refresh_token(self) -> Option<String> {
@@ -263,27 +258,17 @@ impl Authenticator for ScriptAuthenticator {
             .basic_auth(&self.creds.client_id, Some(&self.creds.client_secret))
             .send()?;
 
-        *self
-            .token
-            .write()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew") =
-            Some(parse_response(response)?.into());
+        *self.token.write()? = Some(parse_response(response)?.into());
 
         Ok(())
     }
 
     fn token(&self) -> Option<Token> {
-        self.token
-            .read()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew")
-            .clone()
+        self.token.read().unwrap().clone()
     }
 
     fn is_logged_in(&self) -> bool {
-        self.token
-            .read()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew")
-            .is_some()
+        self.token.read().unwrap().is_some()
     }
 
     fn refresh_token(self) -> Option<String> {
@@ -323,18 +308,11 @@ impl Authenticator for ApplicationAuthenticator {
             ])
             .send()?;
 
-        *self
-            .token
-            .write()
-            .expect("Poisoned RwLock, report bug at https://github.com/Zower/snew") =
-            Some(parse_response(response)?.into());
+        *self.token.write()? = Some(parse_response(response)?.into());
         Ok(())
     }
     fn token(&self) -> Option<Token> {
-        self.token
-            .read()
-            .expect("Poisoned mutex, report bug at https://github.com/Zower/snew")
-            .clone()
+        self.token.read().unwrap().clone()
     }
 
     fn is_logged_in(&self) -> bool {
