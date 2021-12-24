@@ -2,6 +2,7 @@
 use crate::auth::{AuthenticatedClient, Authenticator, UserAuthenticator};
 use crate::things::*;
 
+use std::ops::Add;
 use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -183,7 +184,12 @@ impl Reddit {
                 }
             }
 
-            RouilleResponse::text(format!("Missing state or code parameter. This is a bug from Reddit. Try again. Parameters reddit returned: {}", request.raw_query_string()))
+            let error_msg = format!("Missing state or code parameter. This is a bug from Reddit. Try again. Parameters reddit returned: {}", request.raw_query_string());
+            let response = RouilleResponse::text(&error_msg);
+
+            *copy.write().unwrap() = Some(Err(error_msg));
+
+            response
         })?;
 
         let (_, sender) = server.stoppable();
@@ -197,21 +203,17 @@ impl Reddit {
         let url = format!("https://www.reddit.com/api/v1/authorize?client_id={}&response_type=code\
                                     &state={}&redirect_uri=http://localhost:8080&duration=permanent&scope=*", client_id, state);
 
-        // Open the url, presumably in the users browser.
+        // Open the url
         opener::open_browser(url)?;
 
-        let stop_duration = if let Some(timeout) = timeout {
-            if initial.elapsed() >= timeout {
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-
         // Spin while waiting for request. Could be more efficient, send an issue if this is actually causing a problem for you, and I will fix it.
-        while result.read().map_err(Into::<Error>::into)?.is_none() && !stop_duration {}
+        while result.read().map_err(Into::<Error>::into)?.is_none() {
+            if let Some(timeout) = timeout {
+                if initial.elapsed() >= timeout {
+                    break;
+                }
+            }
+        }
 
         sender.send(())?;
 
@@ -294,6 +296,8 @@ impl<T> From<PoisonError<T>> for Error {
 pub enum CodeFlowError {
     #[error("Received state did not match original state. Original:\t{0}\tReceived:\t{1}")]
     StateDidNotMatch(String, String),
+    #[error("Missing state or code parameters. Received:\t{0}")]
+    MissingParameters(String),
     #[error("Other error:\t{0}")]
     RedditError(#[from] Error),
 }
