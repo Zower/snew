@@ -2,6 +2,7 @@
 mod tests {
     use crate::{
         auth::{ApplicationAuthenticator, Credentials, ScriptAuthenticator},
+        content::Content,
         reddit::{Reddit, Result},
     };
 

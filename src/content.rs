@@ -16,11 +16,12 @@ impl Content {
         let content_type = response.headers().get("Content-Type");
 
         if let Some(content_type) = content_type {
-            let mut split = content_type.to_str().unwrap().split("/");
+            let str = content_type.to_str().unwrap();
+            let mut split = str.split("/");
             if let Some(kind) = split.next() {
                 if kind == "image" {
                     return Ok(Self::Image(response.bytes()?));
-                } else if kind == "text" && split.next() == Some("html") {
+                } else if kind == "text" && String::from(str).contains("html") {
                     return Ok(Self::Html(response.text()?));
                 } else if kind == "text" {
                     return Ok(Self::Text(response.text()?));
