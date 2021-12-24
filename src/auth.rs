@@ -161,9 +161,8 @@ pub trait Authenticator: std::fmt::Debug + Send + Sync {
     fn token(&self) -> Option<Token>;
     /// This authenticator can make requests that pertain to a user, such as posting a comment etc.
     fn is_logged_in(&self) -> bool;
-    /// Returns a refresh token, consuming self. Use this to store the refresh token for future use, e.g. on application shutdown.
-    /// Returns none if this authenticator has no refresh token assosciated with it.
-    fn refresh_token(self) -> Option<String>;
+    /// Return a refresh token, if one exists.
+    fn refresh_token(&self) -> Option<String>;
 }
 
 /// Authenticate on behalf of a user. Use this if you're creating a application that others will use, e.g. a desktop app.
@@ -222,8 +221,8 @@ impl Authenticator for UserAuthenticator {
         self.token.read().unwrap().is_some()
     }
 
-    fn refresh_token(self) -> Option<String> {
-        Some(self.refresh_token)
+    fn refresh_token(&self) -> Option<String> {
+        Some(self.refresh_token.clone())
     }
 }
 
@@ -271,7 +270,7 @@ impl Authenticator for ScriptAuthenticator {
         self.token.read().unwrap().is_some()
     }
 
-    fn refresh_token(self) -> Option<String> {
+    fn refresh_token(&self) -> Option<String> {
         None
     }
 }
@@ -319,7 +318,7 @@ impl Authenticator for ApplicationAuthenticator {
         false
     }
 
-    fn refresh_token(self) -> Option<String> {
+    fn refresh_token(&self) -> Option<String> {
         None
     }
 }

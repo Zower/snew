@@ -128,6 +128,16 @@ impl Reddit {
     //     )
     //     .submit(title, text)
     // }
+
+    /// Returns a refresh token. Use this to store the refresh token for future use, e.g. on application shutdown.
+    /// Returns none if the current authenticator has no refresh token assosciated with it.
+    pub fn refresh_token(self) -> Option<String> {
+        self.inner
+            .authenticator
+            .read()
+            .expect("Poisoned mutex")
+            .refresh_token()
+    }
 }
 
 #[cfg(feature = "code_flow")]
