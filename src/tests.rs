@@ -72,7 +72,8 @@ mod tests {
 
             for comment in post.comments().take(1) {
                 let comment = comment?;
-                println!("Comment: {}", comment.body);
+                println!("{:?}", comment);
+                // println!("Comment: {}", comment.body);
             }
         }
 

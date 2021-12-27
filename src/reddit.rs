@@ -18,7 +18,7 @@ pub const URL: &str = "https://oauth.reddit.com";
 /// After following the instructions, you should be on [the reddit prefs page](https://www.reddit.com/prefs/apps). The client_id will be in the top left corner under the name you chose. The secret is marked clearly. Username and password are your regular login credentials.
 /// # Usage
 /// ```no_run
-/// use snew::{reddit::Reddit, auth::{authenticator::ScriptAuthenticator, Credentials}};
+/// use snew::{reddit::Reddit, auth::{ScriptAuthenticator, Credentials}};
 ///
 /// let script_auth = ScriptAuthenticator::new(Credentials::new(
 ///     "client_id",
@@ -73,7 +73,7 @@ impl Reddit {
     /// # Usage
     /// ```no_run
     /// # fn main() -> snew::reddit::Result<()> {
-    /// # use snew::{reddit::Reddit, auth::{authenticator::ScriptAuthenticator, Credentials}};
+    /// # use snew::{reddit::Reddit, auth::{ScriptAuthenticator, Credentials}};
     /// # let script_auth = ScriptAuthenticator::new(Credentials::new(
     /// #    "client_id",
     /// #   "client_secret",
@@ -100,7 +100,7 @@ impl Reddit {
     ///
     /// for post in top.take(20) {
     ///     let post = post?;
-    ///     println!("{}", post.selftext);
+    ///     println!("{:?}", post.selftext);
     /// }
     /// # Ok(())
     /// # }

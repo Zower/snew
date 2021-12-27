@@ -6,7 +6,7 @@ use self::raw::{
 };
 use crate::{auth::AuthenticatedClient, reddit::Result};
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 #[cfg(feature = "parse_content")]
 use crate::content::Content;
@@ -112,7 +112,7 @@ impl Post {
         CommentFeed {
             client: self.client.clone(),
             url: format!(
-                "{}/r/{}/comments/{}",
+                "{}/r/{}/comments/{}?sort=best&limit=50",
                 crate::reddit::URL,
                 self.subreddit,
                 self.id
@@ -191,6 +191,7 @@ impl Iterator for PostFeed {
 /// A comment.
 #[derive(Debug)]
 pub struct Comment {
+    pub author: String,
     pub body: String,
     pub id: String,
 }
@@ -265,6 +266,7 @@ impl From<(RawKind<RawPostData>, Arc<AuthenticatedClient>)> for Post {
 impl From<RawKind<RawCommentData>> for Comment {
     fn from(raw: RawKind<RawCommentData>) -> Self {
         Self {
+            author: raw.data.author,
             id: raw.data.id,
             body: raw.data.body,
         }
@@ -374,6 +376,7 @@ pub(crate) mod raw {
 
         #[derive(Debug, Clone, Deserialize)]
         pub(crate) struct RawCommentData {
+            pub(crate) author: String,
             pub(crate) body: String,
             pub(crate) id: String,
         }
