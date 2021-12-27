@@ -2,7 +2,6 @@
 mod tests {
     use crate::{
         auth::{ApplicationAuthenticator, Credentials, ScriptAuthenticator},
-        content::Content,
         reddit::{Reddit, Result},
     };
 
@@ -73,7 +72,7 @@ mod tests {
 
             for comment in post.comments().take(1) {
                 let comment = comment?;
-                println!("By: {}, {}", comment.author, comment.body);
+                println!("Comment: {}", comment.body);
             }
         }
 

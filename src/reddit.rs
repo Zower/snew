@@ -2,7 +2,6 @@
 use crate::auth::{AuthenticatedClient, Authenticator, UserAuthenticator};
 use crate::things::*;
 
-use std::ops::Add;
 use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant};
 
